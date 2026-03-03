@@ -1,9 +1,10 @@
-import { handleLogout, handleRefresh, handleRequestCode, handleVerifyCode, requireAuth } from './auth'
+import { handleGitHubOAuthCallback, handleGitHubOAuthStart, handleLogout, handleRefresh, requireAuth } from './auth'
 import {
   handleCreateGearFromUrl,
   handleDeleteGearItem,
   handleListGearItems,
   handlePreview,
+  handleRenameGearCategory,
   handleReorderGearItems,
   handleUpdateGearItem,
 } from './gear'
@@ -23,12 +24,12 @@ async function routeApi(request: Request, env: Env) {
     return preflightResponse(request, env)
   }
 
-  if (method === 'POST' && pathname === '/api/auth/request-code') {
-    return handleRequestCode(request, env)
+  if (method === 'GET' && pathname === '/api/auth/github/start') {
+    return handleGitHubOAuthStart(request, env)
   }
 
-  if (method === 'POST' && pathname === '/api/auth/verify-code') {
-    return handleVerifyCode(request, env)
+  if (method === 'GET' && pathname === '/api/auth/github/callback') {
+    return handleGitHubOAuthCallback(request, env)
   }
 
   if (method === 'POST' && pathname === '/api/auth/refresh') {
@@ -61,6 +62,14 @@ async function routeApi(request: Request, env: Env) {
       return errorResponse('認証が必要です', 401)
     }
     return handleReorderGearItems(request, env)
+  }
+
+  if (method === 'PATCH' && pathname === '/api/admin/gear-categories/rename') {
+    const auth = await requireAuth(request, env)
+    if (!auth) {
+      return errorResponse('認証が必要です', 401)
+    }
+    return handleRenameGearCategory(request, env)
   }
 
   if (method === 'PATCH' && pathname.startsWith('/api/admin/gear-items/') && pathname !== '/api/admin/gear-items/reorder') {

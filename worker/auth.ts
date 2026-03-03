@@ -9,39 +9,123 @@ import {
   parseCookies,
   randomToken,
   readBearerToken,
-  readJsonBody,
   sha256Hex,
   verifyAccessToken,
 } from './utils'
 
 const ACCESS_TOKEN_TTL_SEC = 60 * 15
 const REFRESH_TOKEN_TTL_SEC = 60 * 60 * 24 * 30
-const AUTH_CODE_TTL_SEC = 60 * 10
+const OAUTH_STATE_TTL_SEC = 60 * 10
 
-function normalizeEmail(raw: string) {
+type GitHubAccessTokenResponse = {
+  access_token?: string
+}
+
+type GitHubUserResponse = {
+  login?: string
+  email?: string | null
+}
+
+type GitHubEmailResponse = {
+  email?: string
+  primary?: boolean
+  verified?: boolean
+}
+
+function normalizeLogin(raw: string) {
   return raw.trim().toLowerCase()
 }
 
-function isAllowedEmail(email: string, env: Env) {
-  const allowed = env.ALLOWED_EMAILS.split(',')
+function isAllowedGitHubLogin(login: string, env: Env) {
+  const allowed = env.ALLOWED_GITHUB_LOGINS.split(',')
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean)
-  return allowed.includes(email)
+  return allowed.includes(login)
 }
 
-function createCode() {
-  return String(Math.floor(Math.random() * 1_000_000)).padStart(6, '0')
+function getAppOrigin(request: Request, env: Env) {
+  if (env.APP_ORIGIN?.trim()) {
+    return env.APP_ORIGIN.trim()
+  }
+  return new URL(request.url).origin
 }
 
-async function createCodeHash(email: string, code: string, env: Env) {
-  return sha256Hex(`${email}:${code}:${env.ACCESS_TOKEN_SECRET}`)
+function getGitHubCallbackUrl(request: Request, env: Env) {
+  return new URL('/api/auth/github/callback', getAppOrigin(request, env)).toString()
+}
+
+function getPostAuthRedirectUrl(request: Request, env: Env, authError?: string) {
+  const url = new URL('/', getAppOrigin(request, env))
+  if (authError) {
+    url.searchParams.set('auth_error', authError)
+  }
+  return url.toString()
+}
+
+function isSecureRequest(request: Request) {
+  return new URL(request.url).protocol === 'https:'
+}
+
+function buildGitHubStateCookie(state: string, request: Request, maxAgeSec: number) {
+  const segments = [
+    `github_oauth_state=${state}`,
+    'HttpOnly',
+    'SameSite=Lax',
+    'Path=/api/auth/github',
+    `Max-Age=${maxAgeSec}`,
+  ]
+  if (isSecureRequest(request)) {
+    segments.push('Secure')
+  }
+  return segments.join('; ')
+}
+
+function clearGitHubStateCookie(request: Request) {
+  const segments = ['github_oauth_state=', 'HttpOnly', 'SameSite=Lax', 'Path=/api/auth/github', 'Max-Age=0']
+  if (isSecureRequest(request)) {
+    segments.push('Secure')
+  }
+  return segments.join('; ')
+}
+
+function validateGitHubOAuthConfig(env: Env) {
+  if (!env.ACCESS_TOKEN_SECRET) {
+    return 'ACCESS_TOKEN_SECRET が未設定です'
+  }
+  if (!env.GITHUB_CLIENT_ID) {
+    return 'GITHUB_CLIENT_ID が未設定です'
+  }
+  if (!env.GITHUB_CLIENT_SECRET) {
+    return 'GITHUB_CLIENT_SECRET が未設定です'
+  }
+  if (!env.ALLOWED_GITHUB_LOGINS) {
+    return 'ALLOWED_GITHUB_LOGINS が未設定です'
+  }
+  return null
+}
+
+function buildGitHubApiHeaders(accessToken: string) {
+  return {
+    Accept: 'application/vnd.github+json',
+    Authorization: `Bearer ${accessToken}`,
+    'User-Agent': 'ichi0g0y-portfolio-worker',
+    'X-GitHub-Api-Version': '2022-11-28',
+  }
+}
+
+function redirectResponse(location: string, cookies: string[] = []) {
+  const headers = new Headers({ Location: location })
+  for (const cookie of cookies) {
+    headers.append('Set-Cookie', cookie)
+  }
+  return new Response(null, { status: 302, headers })
 }
 
 async function createRefreshHash(token: string, env: Env) {
   return sha256Hex(`${token}:${env.ACCESS_TOKEN_SECRET}`)
 }
 
-async function issueAuthSession(email: string, request: Request, env: Env) {
+async function issueAuthSession(identity: string, request: Request, env: Env) {
   const now = nowSeconds()
   const sessionId = randomToken(24)
   const refreshToken = randomToken(32)
@@ -54,110 +138,134 @@ async function issueAuthSession(email: string, request: Request, env: Env) {
       VALUES (?1, ?2, ?3, ?4, ?5, NULL)
     `,
   )
-    .bind(sessionId, email, refreshHash, refreshExpiresAt, now)
+    .bind(sessionId, identity, refreshHash, refreshExpiresAt, now)
     .run()
 
   const accessToken = await createAccessToken(
-    { sid: sessionId, email, iat: now, exp: now + ACCESS_TOKEN_TTL_SEC },
+    { sid: sessionId, email: identity, iat: now, exp: now + ACCESS_TOKEN_TTL_SEC },
     env.ACCESS_TOKEN_SECRET,
   )
 
   return {
     accessToken,
     refreshCookie: buildRefreshCookie(refreshToken, request, REFRESH_TOKEN_TTL_SEC),
-    email,
+    email: identity,
     expiresAt: now + ACCESS_TOKEN_TTL_SEC,
   }
 }
 
-export async function handleRequestCode(request: Request, env: Env) {
-  if (!env.ACCESS_TOKEN_SECRET) {
-    return errorResponse('ACCESS_TOKEN_SECRET が未設定です', 500)
-  }
-
-  const body = await readJsonBody<{ email?: string }>(request)
-  const email = normalizeEmail(body?.email ?? '')
-  if (!email || !email.includes('@')) {
-    return errorResponse('メールアドレスを入力してください', 400)
-  }
-
-  if (!isAllowedEmail(email, env)) {
-    return errorResponse('このメールアドレスは許可されていません', 403)
-  }
-
-  const code = createCode()
-  const codeHash = await createCodeHash(email, code, env)
-  const now = nowSeconds()
-
-  await env.DB.batch([
-    env.DB.prepare('DELETE FROM login_codes WHERE email = ?1').bind(email),
-    env.DB.prepare(
-      `
-        INSERT INTO login_codes (email, code_hash, expires_at, created_at)
-        VALUES (?1, ?2, ?3, ?4)
-      `,
-    ).bind(email, codeHash, now + AUTH_CODE_TTL_SEC, now),
-  ])
-
-  console.log(`[auth-code] ${email}: ${code}`)
-
-  return jsonResponse({
-    ok: true,
-    message: '認証コードを発行しました',
-    devCode: env.SHOW_DEV_AUTH_CODE === '1' ? code : undefined,
+async function fetchGitHubAccessToken(code: string, request: Request, env: Env) {
+  const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      client_id: env.GITHUB_CLIENT_ID,
+      client_secret: env.GITHUB_CLIENT_SECRET,
+      code,
+      redirect_uri: getGitHubCallbackUrl(request, env),
+    }),
   })
+
+  if (!tokenResponse.ok) {
+    return null
+  }
+
+  const tokenData = (await tokenResponse.json().catch(() => null)) as GitHubAccessTokenResponse | null
+  return tokenData?.access_token ?? null
 }
 
-export async function handleVerifyCode(request: Request, env: Env) {
-  if (!env.ACCESS_TOKEN_SECRET) {
-    return errorResponse('ACCESS_TOKEN_SECRET が未設定です', 500)
-  }
-
-  const body = await readJsonBody<{ email?: string; code?: string }>(request)
-  const email = normalizeEmail(body?.email ?? '')
-  const code = (body?.code ?? '').trim()
-
-  if (!email || !code) {
-    return errorResponse('メールアドレスと認証コードを入力してください', 400)
-  }
-
-  const row = await env.DB.prepare(
-    `
-      SELECT id, code_hash, expires_at
-      FROM login_codes
-      WHERE email = ?1
-      ORDER BY id DESC
-      LIMIT 1
-    `,
-  )
-    .bind(email)
-    .first<{ id: number; code_hash: string; expires_at: number }>()
-
-  if (!row) {
-    return errorResponse('認証コードが見つかりません', 401)
-  }
-
-  if (row.expires_at <= nowSeconds()) {
-    await env.DB.prepare('DELETE FROM login_codes WHERE email = ?1').bind(email).run()
-    return errorResponse('認証コードの有効期限が切れています', 401)
-  }
-
-  const expectedHash = await createCodeHash(email, code, env)
-  if (expectedHash !== row.code_hash) {
-    return errorResponse('認証コードが一致しません', 401)
-  }
-
-  await env.DB.prepare('DELETE FROM login_codes WHERE email = ?1').bind(email).run()
-
-  const session = await issueAuthSession(email, request, env)
-  const response = jsonResponse({
-    ok: true,
-    accessToken: session.accessToken,
-    email: session.email,
-    expiresAt: session.expiresAt,
+async function fetchGitHubUser(accessToken: string) {
+  const userResponse = await fetch('https://api.github.com/user', {
+    headers: buildGitHubApiHeaders(accessToken),
   })
-  response.headers.set('Set-Cookie', session.refreshCookie)
-  return response
+  if (!userResponse.ok) {
+    return null
+  }
+
+  const user = (await userResponse.json().catch(() => null)) as GitHubUserResponse | null
+  const login = normalizeLogin(user?.login ?? '')
+  if (!login) {
+    return null
+  }
+
+  let email = user?.email ?? null
+  if (!email) {
+    const emailsResponse = await fetch('https://api.github.com/user/emails', {
+      headers: buildGitHubApiHeaders(accessToken),
+    })
+    if (!emailsResponse.ok) {
+      return { login, email: null }
+    }
+
+    const emails = (await emailsResponse.json().catch(() => null)) as GitHubEmailResponse[] | null
+    const verifiedPrimary = emails?.find((item) => item.verified && item.primary)
+    const verifiedAny = emails?.find((item) => item.verified)
+    email = verifiedPrimary?.email ?? verifiedAny?.email ?? null
+  }
+
+  return {
+    login,
+    email: email ? email.trim().toLowerCase() : null,
+  }
+}
+
+export async function handleGitHubOAuthStart(request: Request, env: Env) {
+  const configError = validateGitHubOAuthConfig(env)
+  if (configError) {
+    return errorResponse(configError, 500)
+  }
+
+  const state = randomToken(24)
+  const authorizeUrl = new URL('https://github.com/login/oauth/authorize')
+  authorizeUrl.searchParams.set('client_id', env.GITHUB_CLIENT_ID)
+  authorizeUrl.searchParams.set('redirect_uri', getGitHubCallbackUrl(request, env))
+  authorizeUrl.searchParams.set('scope', 'read:user user:email')
+  authorizeUrl.searchParams.set('state', state)
+
+  return redirectResponse(authorizeUrl.toString(), [buildGitHubStateCookie(state, request, OAUTH_STATE_TTL_SEC)])
+}
+
+export async function handleGitHubOAuthCallback(request: Request, env: Env) {
+  const configError = validateGitHubOAuthConfig(env)
+  if (configError) {
+    return errorResponse(configError, 500)
+  }
+
+  const url = new URL(request.url)
+  const authError = url.searchParams.get('error')
+  if (authError) {
+    return redirectResponse(getPostAuthRedirectUrl(request, env, 'oauth_denied'), [clearGitHubStateCookie(request)])
+  }
+
+  const state = (url.searchParams.get('state') ?? '').trim()
+  const code = (url.searchParams.get('code') ?? '').trim()
+  const stateCookie = parseCookies(request).get('github_oauth_state')
+  if (!state || !code || !stateCookie || state !== stateCookie) {
+    return redirectResponse(getPostAuthRedirectUrl(request, env, 'state_mismatch'), [clearGitHubStateCookie(request)])
+  }
+
+  const accessToken = await fetchGitHubAccessToken(code, request, env)
+  if (!accessToken) {
+    return redirectResponse(getPostAuthRedirectUrl(request, env, 'token_exchange_failed'), [
+      clearGitHubStateCookie(request),
+    ])
+  }
+
+  const user = await fetchGitHubUser(accessToken)
+  if (!user) {
+    return redirectResponse(getPostAuthRedirectUrl(request, env, 'github_user_failed'), [clearGitHubStateCookie(request)])
+  }
+
+  if (!isAllowedGitHubLogin(user.login, env)) {
+    return redirectResponse(getPostAuthRedirectUrl(request, env, 'forbidden_user'), [clearGitHubStateCookie(request)])
+  }
+
+  const identity = user.email ?? `github:${user.login}`
+  const session = await issueAuthSession(identity, request, env)
+  return redirectResponse(getPostAuthRedirectUrl(request, env), [session.refreshCookie])
 }
 
 export async function handleRefresh(request: Request, env: Env) {
@@ -187,18 +295,19 @@ export async function handleRefresh(request: Request, env: Env) {
     return errorResponse('refresh token が無効です', 401)
   }
 
-  const nextRefreshToken = randomToken(32)
-  const nextRefreshHash = await createRefreshHash(nextRefreshToken, env)
   const nextRefreshExpiresAt = now + REFRESH_TOKEN_TTL_SEC
 
+  // Refresh token rotation is intentionally disabled here to avoid race conditions on reload.
+  // In development (React StrictMode) and multi-tab usage, concurrent refresh requests could
+  // invalidate each other when rotating tokens, causing intermittent logouts.
   await env.DB.prepare(
     `
       UPDATE auth_sessions
-      SET refresh_hash = ?1, expires_at = ?2
-      WHERE id = ?3
+      SET expires_at = ?1
+      WHERE id = ?2
     `,
   )
-    .bind(nextRefreshHash, nextRefreshExpiresAt, session.id)
+    .bind(nextRefreshExpiresAt, session.id)
     .run()
 
   const accessToken = await createAccessToken(
@@ -212,7 +321,7 @@ export async function handleRefresh(request: Request, env: Env) {
     email: session.email,
     expiresAt: now + ACCESS_TOKEN_TTL_SEC,
   })
-  response.headers.set('Set-Cookie', buildRefreshCookie(nextRefreshToken, request, REFRESH_TOKEN_TTL_SEC))
+  response.headers.set('Set-Cookie', buildRefreshCookie(refreshToken, request, REFRESH_TOKEN_TTL_SEC))
   return response
 }
 
@@ -230,7 +339,8 @@ export async function handleLogout(request: Request, env: Env) {
   }
 
   const response = jsonResponse({ ok: true })
-  response.headers.set('Set-Cookie', clearRefreshCookie(request))
+  response.headers.append('Set-Cookie', clearRefreshCookie(request))
+  response.headers.append('Set-Cookie', clearGitHubStateCookie(request))
   return response
 }
 

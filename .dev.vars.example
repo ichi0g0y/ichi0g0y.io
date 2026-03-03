@@ -1,4 +1,5 @@
 ACCESS_TOKEN_SECRET=replace-with-long-random-string
-ALLOWED_EMAILS=you@example.com,ichi0g0y@gmail.com
+ALLOWED_GITHUB_LOGINS=your-github-login,ichi0g0y
+GITHUB_CLIENT_ID=replace-with-github-oauth-app-client-id
+GITHUB_CLIENT_SECRET=replace-with-github-oauth-app-client-secret
 APP_ORIGIN=http://localhost:5173
-SHOW_DEV_AUTH_CODE=1

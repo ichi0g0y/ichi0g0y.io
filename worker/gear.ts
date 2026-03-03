@@ -6,6 +6,7 @@ interface GearRow {
   title: string
   category: string
   image_url: string | null
+  image_urls: string | null
   image_fit: 'cover' | 'contain'
   link_url: string | null
   description: string | null
@@ -19,6 +20,7 @@ interface LinkPreview {
   title: string | null
   description: string | null
   imageUrl: string | null
+  imageCandidates: string[]
 }
 
 const HTML_ENTITY_MAP: Record<string, string> = {
@@ -33,11 +35,13 @@ const HTML_ENTITY_MAP: Record<string, string> = {
 const PREVIEW_FETCH_TIMEOUT_MS = 20_000
 
 function mapGearRow(row: GearRow): GearItem {
+  const imageUrls = parseStoredImageUrls(row.image_urls, row.image_url)
   return {
     id: row.id,
     title: row.title,
     category: row.category,
-    imageUrl: row.image_url,
+    imageUrl: imageUrls[0] ?? null,
+    imageUrls,
     imageFit: row.image_fit === 'cover' ? 'cover' : 'contain',
     linkUrl: row.link_url,
     description: row.description,
@@ -49,6 +53,39 @@ function mapGearRow(row: GearRow): GearItem {
 
 function normalizeImageFit(value: unknown): GearItem['imageFit'] {
   return value === 'cover' ? 'cover' : 'contain'
+}
+
+function parseStoredImageUrls(imageUrlsJson: string | null, fallbackImageUrl: string | null) {
+  const values: string[] = []
+  const seen = new Set<string>()
+
+  const append = (raw: unknown) => {
+    if (typeof raw !== 'string') {
+      return
+    }
+    const trimmed = raw.trim()
+    if (!trimmed || seen.has(trimmed)) {
+      return
+    }
+    seen.add(trimmed)
+    values.push(trimmed)
+  }
+
+  if (imageUrlsJson) {
+    try {
+      const parsed = JSON.parse(imageUrlsJson) as unknown
+      if (Array.isArray(parsed)) {
+        for (const value of parsed) {
+          append(value)
+        }
+      }
+    } catch {
+      // ignore broken legacy JSON and fallback to single image_url.
+    }
+  }
+
+  append(fallbackImageUrl)
+  return values
 }
 
 function extractMetaContent(html: string, key: string) {
@@ -149,6 +186,110 @@ function parseAttributes(tag: string) {
   return attrs
 }
 
+function extractAmazonDynamicImages(rawValue: string | null) {
+  if (!rawValue) {
+    return [] as string[]
+  }
+
+  try {
+    const decoded = decodeHtmlEntities(rawValue)
+    const parsed = JSON.parse(decoded) as unknown
+    if (!parsed || typeof parsed !== 'object') {
+      return [] as string[]
+    }
+
+    const candidates: Array<{ url: string; area: number }> = []
+
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof key !== 'string' || !Array.isArray(value)) {
+        continue
+      }
+
+      const widthRaw = value[0]
+      const heightRaw = value[1]
+      const width = typeof widthRaw === 'number' ? widthRaw : Number(widthRaw)
+      const height = typeof heightRaw === 'number' ? heightRaw : Number(heightRaw)
+      const area = Number.isFinite(width) && Number.isFinite(height) ? width * height : 0
+
+      candidates.push({ url: key, area })
+    }
+
+    candidates.sort((left, right) => right.area - left.area)
+    return candidates.map((entry) => entry.url)
+  } catch {
+    return [] as string[]
+  }
+}
+
+function extractLargestAmazonDynamicImage(rawValue: string | null) {
+  return extractAmazonDynamicImages(rawValue)[0] ?? null
+}
+
+function decodeJsonStringLiteral(value: string) {
+  try {
+    return JSON.parse(`"${value}"`) as string
+  } catch {
+    return value
+  }
+}
+
+function extractAmazonScriptImageCandidates(html: string) {
+  const values: string[] = []
+  const patterns = [/"hiRes"\s*:\s*"([^"]+)"/g, /"large"\s*:\s*"([^"]+)"/g, /"mainUrl"\s*:\s*"([^"]+)"/g]
+
+  for (const pattern of patterns) {
+    let match = pattern.exec(html)
+    while (match) {
+      const unescaped = decodeJsonStringLiteral(match[1])
+      const normalized = normalizePreviewValue(unescaped)
+      if (normalized) {
+        values.push(normalized)
+      }
+      match = pattern.exec(html)
+    }
+    pattern.lastIndex = 0
+  }
+
+  return normalizeImageUrls(values)
+}
+
+function expandAmazonImageUrlVariants(absoluteUrl: string) {
+  try {
+    const parsed = new URL(absoluteUrl)
+    if (!parsed.hostname.includes('media-amazon.com')) {
+      return [absoluteUrl]
+    }
+
+    const match = parsed.pathname.match(/^(.*)\._[^/]+_(\.[a-zA-Z0-9]+)$/)
+    if (!match) {
+      return [absoluteUrl]
+    }
+
+    const prefix = match[1]
+    const ext = match[2]
+    const variants = [
+      `${prefix}._AC_SL1500_${ext}`,
+      `${prefix}._SL1500_${ext}`,
+      `${prefix}${ext}`,
+      parsed.pathname,
+    ]
+
+    const urls: string[] = []
+    const seen = new Set<string>()
+    for (const pathname of variants) {
+      const url = `${parsed.origin}${pathname}${parsed.search}`
+      if (seen.has(url)) {
+        continue
+      }
+      seen.add(url)
+      urls.push(url)
+    }
+    return urls
+  } catch {
+    return [absoluteUrl]
+  }
+}
+
 function extractAmazonLandingImage(html: string) {
   const match = html.match(/<img\s+[^>]*id=(["'])landingImage\1[^>]*>/i)
   if (!match) {
@@ -156,7 +297,9 @@ function extractAmazonLandingImage(html: string) {
   }
 
   const attrs = parseAttributes(match[0])
-  return attrs.get('data-old-hires') ?? attrs.get('src') ?? null
+  const dynamicImage = extractLargestAmazonDynamicImage(attrs.get('data-a-dynamic-image') ?? null)
+  const oldHiresImage = normalizePreviewValue(attrs.get('data-old-hires') ?? null)
+  return dynamicImage ?? oldHiresImage ?? attrs.get('src') ?? null
 }
 
 function toAbsoluteUrl(value: string | null, base: URL) {
@@ -168,6 +311,121 @@ function toAbsoluteUrl(value: string | null, base: URL) {
   } catch {
     return null
   }
+}
+
+function normalizeImageUrls(values: string[]) {
+  const normalized: string[] = []
+  const seen = new Set<string>()
+  for (const value of values) {
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) {
+      continue
+    }
+    seen.add(trimmed)
+    normalized.push(trimmed)
+  }
+  return normalized
+}
+
+function resolveRequestedImageUrls(imageUrls: unknown, imageUrl: unknown, base: URL) {
+  const resolved: string[] = []
+
+  if (imageUrls !== undefined) {
+    if (!Array.isArray(imageUrls)) {
+      return { ok: false as const, error: '画像URL一覧が不正です' }
+    }
+    for (const value of imageUrls) {
+      if (typeof value !== 'string') {
+        return { ok: false as const, error: '画像URL一覧が不正です' }
+      }
+      const absolute = toAbsoluteUrl(value.trim(), base)
+      if (!absolute) {
+        return { ok: false as const, error: '画像URLが不正です' }
+      }
+      resolved.push(absolute)
+    }
+    return { ok: true as const, imageUrls: normalizeImageUrls(resolved) }
+  }
+
+  if (imageUrl !== undefined) {
+    if (typeof imageUrl !== 'string') {
+      return { ok: false as const, error: '画像URLが不正です' }
+    }
+    const trimmed = imageUrl.trim()
+    if (!trimmed) {
+      return { ok: true as const, imageUrls: [] }
+    }
+    const absolute = toAbsoluteUrl(trimmed, base)
+    if (!absolute) {
+      return { ok: false as const, error: '画像URLが不正です' }
+    }
+    return { ok: true as const, imageUrls: [absolute] }
+  }
+
+  return { ok: true as const, imageUrls: null as string[] | null }
+}
+
+function collectImageCandidates(html: string, base: URL, primaryImageUrl: string | null) {
+  const candidates: string[] = []
+  const seen = new Set<string>()
+  const amazonHost = isAmazonHost(base.hostname)
+
+  const pushCandidate = (raw: string | null) => {
+    const normalized = normalizePreviewValue(raw)
+    if (!normalized) {
+      return
+    }
+    const absolute = toAbsoluteUrl(normalized, base)
+    if (!absolute) {
+      return
+    }
+    const expanded = amazonHost ? expandAmazonImageUrlVariants(absolute) : [absolute]
+    for (const url of expanded) {
+      if (seen.has(url)) {
+        continue
+      }
+      const protocol = new URL(url).protocol
+      if (!['http:', 'https:'].includes(protocol)) {
+        continue
+      }
+      seen.add(url)
+      candidates.push(url)
+      if (candidates.length >= 24) {
+        break
+      }
+    }
+  }
+
+  const pushCandidates = (values: string[]) => {
+    for (const value of values) {
+      pushCandidate(value)
+      if (candidates.length >= 24) {
+        break
+      }
+    }
+  }
+
+  pushCandidate(primaryImageUrl)
+  pushCandidate(extractMetaContent(html, 'twitter:image'))
+  pushCandidate(extractMetaContent(html, 'twitter:image:src'))
+  if (amazonHost) {
+    pushCandidates(extractAmazonScriptImageCandidates(html))
+  }
+
+  const imgTagRegex = /<img\s+[^>]*>/gi
+  const imgTags = html.match(imgTagRegex) ?? []
+  for (const tag of imgTags) {
+    const attrs = parseAttributes(tag)
+    pushCandidates(extractAmazonDynamicImages(attrs.get('data-a-dynamic-image') ?? null))
+    pushCandidate(attrs.get('src') ?? null)
+    pushCandidate(attrs.get('data-src') ?? null)
+    pushCandidate(attrs.get('data-old-hires') ?? null)
+    if (candidates.length >= 24) {
+      break
+    }
+  }
+
+  return candidates.slice(0, 24)
 }
 
 export async function fetchLinkPreview(url: string): Promise<LinkPreview> {
@@ -214,8 +472,17 @@ export async function fetchLinkPreview(url: string): Promise<LinkPreview> {
 
   let imageUrl = toAbsoluteUrl(ogImage, finalTarget)
   const isGenericAmazonImage = imageUrl?.includes('/share-icons/previewdoh/amazon.png') ?? false
-  if (useAmazonFallback && isGenericAmazonImage) {
+  const amazonLandingImage = isAmazonHost(finalTarget.hostname)
+    ? toAbsoluteUrl(normalizePreviewValue(extractAmazonLandingImage(html)), finalTarget)
+    : null
+  if (amazonLandingImage) {
+    imageUrl = amazonLandingImage
+  } else if (useAmazonFallback && isGenericAmazonImage) {
     imageUrl = toAbsoluteUrl(normalizePreviewValue(extractAmazonLandingImage(html)), finalTarget) ?? imageUrl
+  }
+  const imageCandidates = collectImageCandidates(html, finalTarget, imageUrl)
+  if (!imageUrl && imageCandidates.length > 0) {
+    imageUrl = imageCandidates[0]
   }
 
   return {
@@ -223,13 +490,14 @@ export async function fetchLinkPreview(url: string): Promise<LinkPreview> {
     title,
     description,
     imageUrl,
+    imageCandidates,
   }
 }
 
 export async function handleListGearItems(env: Env) {
   const rows = await env.DB.prepare(
     `
-      SELECT id, title, category, image_url, image_fit, link_url, description, sort_order, created_at, updated_at
+      SELECT id, title, category, image_url, image_urls, image_fit, link_url, description, sort_order, created_at, updated_at
       FROM gear_items
       ORDER BY sort_order ASC, id ASC
     `,
@@ -261,6 +529,8 @@ export async function handleCreateGearFromUrl(request: Request, env: Env) {
     title?: string
     description?: string
     category?: string
+    imageUrl?: unknown
+    imageUrls?: unknown
     imageFit?: unknown
   }>(request)
   const inputUrl = body?.url?.trim()
@@ -282,15 +552,22 @@ export async function handleCreateGearFromUrl(request: Request, env: Env) {
   const requestedTitle = body?.title?.trim()
   const requestedDescriptionRaw = body?.description
   const requestedDescription = typeof requestedDescriptionRaw === 'string' ? requestedDescriptionRaw.trim() : null
+  const requestedImages = resolveRequestedImageUrls(body?.imageUrls, body?.imageUrl, new URL(preview.url))
+  if (!requestedImages.ok) {
+    return errorResponse(requestedImages.error, 400)
+  }
   const requestedImageFit = body?.imageFit === undefined ? null : normalizeImageFit(body.imageFit)
   const category = requestedCategory || '外部リンク'
   const title = requestedTitle || preview.title || new URL(preview.url).hostname
   const description = requestedDescription || preview.description
+  const previewImageUrls = normalizeImageUrls(preview.imageCandidates.length > 0 ? preview.imageCandidates : [preview.imageUrl ?? ''])
+  const imageUrls = requestedImages.imageUrls ?? previewImageUrls
+  const imageUrl = imageUrls[0] ?? null
   const imageFit = requestedImageFit ?? 'contain'
 
   const existing = await env.DB.prepare(
     `
-      SELECT id, title, category, image_url, image_fit, link_url, description, sort_order, created_at, updated_at
+      SELECT id, title, category, image_url, image_urls, image_fit, link_url, description, sort_order, created_at, updated_at
       FROM gear_items
       WHERE link_url = ?1 OR link_url = ?2
       ORDER BY id DESC
@@ -306,12 +583,12 @@ export async function handleCreateGearFromUrl(request: Request, env: Env) {
     const updated = await env.DB.prepare(
       `
         UPDATE gear_items
-        SET title = ?1, category = ?2, image_url = ?3, image_fit = ?4, link_url = ?5, description = ?6, updated_at = ?7
-        WHERE id = ?8
-        RETURNING id, title, category, image_url, image_fit, link_url, description, sort_order, created_at, updated_at
+        SET title = ?1, category = ?2, image_url = ?3, image_urls = ?4, image_fit = ?5, link_url = ?6, description = ?7, updated_at = ?8
+        WHERE id = ?9
+        RETURNING id, title, category, image_url, image_urls, image_fit, link_url, description, sort_order, created_at, updated_at
       `,
     )
-      .bind(title, nextCategory, preview.imageUrl, nextImageFit, preview.url, description, now, existing.id)
+      .bind(title, nextCategory, imageUrl, JSON.stringify(imageUrls), nextImageFit, preview.url, description, now, existing.id)
       .first<GearRow>()
 
     if (!updated) {
@@ -328,12 +605,12 @@ export async function handleCreateGearFromUrl(request: Request, env: Env) {
 
   const inserted = await env.DB.prepare(
     `
-      INSERT INTO gear_items (title, category, image_url, image_fit, link_url, description, sort_order, created_at, updated_at)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-      RETURNING id, title, category, image_url, image_fit, link_url, description, sort_order, created_at, updated_at
+      INSERT INTO gear_items (title, category, image_url, image_urls, image_fit, link_url, description, sort_order, created_at, updated_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+      RETURNING id, title, category, image_url, image_urls, image_fit, link_url, description, sort_order, created_at, updated_at
     `,
   )
-    .bind(title, category, preview.imageUrl, imageFit, preview.url, description, nextSort, now, now)
+    .bind(title, category, imageUrl, JSON.stringify(imageUrls), imageFit, preview.url, description, nextSort, now, now)
     .first<GearRow>()
 
   if (!inserted) {
@@ -351,10 +628,17 @@ export async function handleUpdateGearItem(request: Request, env: Env) {
     return errorResponse('更新対象のIDが不正です', 400)
   }
 
-  const body = await readJsonBody<{ title?: string; description?: string; category?: string; imageFit?: unknown }>(request)
+  const body = await readJsonBody<{
+    title?: string
+    description?: string
+    category?: string
+    imageUrls?: unknown
+    imageUrl?: unknown
+    imageFit?: unknown
+  }>(request)
   const existing = await env.DB.prepare(
     `
-      SELECT id, title, category, image_url, image_fit, link_url, description, sort_order, created_at, updated_at
+      SELECT id, title, category, image_url, image_urls, image_fit, link_url, description, sort_order, created_at, updated_at
       FROM gear_items
       WHERE id = ?1
       LIMIT 1
@@ -376,18 +660,32 @@ export async function handleUpdateGearItem(request: Request, env: Env) {
   const nextCategory = nextCategoryRaw || existing.category
   const nextDescription =
     typeof body?.description === 'string' ? (body.description.trim() || null) : existing.description
+  let imageBaseUrl = new URL(request.url)
+  if (existing.link_url) {
+    try {
+      imageBaseUrl = new URL(existing.link_url)
+    } catch {
+      imageBaseUrl = new URL(request.url)
+    }
+  }
+  const resolvedImageUrls = resolveRequestedImageUrls(body?.imageUrls, body?.imageUrl, imageBaseUrl)
+  if (!resolvedImageUrls.ok) {
+    return errorResponse(resolvedImageUrls.error, 400)
+  }
+  const nextImageUrls = resolvedImageUrls.imageUrls ?? parseStoredImageUrls(existing.image_urls, existing.image_url)
+  const nextImageUrl = nextImageUrls[0] ?? null
   const nextImageFit = body?.imageFit === undefined ? existing.image_fit : normalizeImageFit(body.imageFit)
 
   const now = nowSeconds()
   const updated = await env.DB.prepare(
     `
       UPDATE gear_items
-      SET title = ?1, category = ?2, description = ?3, image_fit = ?4, updated_at = ?5
-      WHERE id = ?6
-      RETURNING id, title, category, image_url, image_fit, link_url, description, sort_order, created_at, updated_at
+      SET title = ?1, category = ?2, description = ?3, image_url = ?4, image_urls = ?5, image_fit = ?6, updated_at = ?7
+      WHERE id = ?8
+      RETURNING id, title, category, image_url, image_urls, image_fit, link_url, description, sort_order, created_at, updated_at
     `,
   )
-    .bind(nextTitle, nextCategory, nextDescription, nextImageFit, now, id)
+    .bind(nextTitle, nextCategory, nextDescription, nextImageUrl, JSON.stringify(nextImageUrls), nextImageFit, now, id)
     .first<GearRow>()
 
   if (!updated) {
@@ -395,6 +693,38 @@ export async function handleUpdateGearItem(request: Request, env: Env) {
   }
 
   return jsonResponse({ ok: true, item: mapGearRow(updated) })
+}
+
+export async function handleRenameGearCategory(request: Request, env: Env) {
+  const body = await readJsonBody<{ oldCategory?: string; newCategory?: string }>(request)
+  const oldCategory = typeof body?.oldCategory === 'string' ? body.oldCategory.trim() : ''
+  const newCategory = typeof body?.newCategory === 'string' ? body.newCategory.trim() : ''
+
+  if (!oldCategory) {
+    return errorResponse('変更前カテゴリ名を入力してください', 400)
+  }
+
+  if (!newCategory) {
+    return errorResponse('変更後カテゴリ名を入力してください', 400)
+  }
+
+  if (oldCategory === newCategory) {
+    return jsonResponse({ ok: true, oldCategory, newCategory, updatedCount: 0 })
+  }
+
+  const now = nowSeconds()
+  const result = await env.DB
+    .prepare('UPDATE gear_items SET category = ?1, updated_at = ?2 WHERE category = ?3')
+    .bind(newCategory, now, oldCategory)
+    .run()
+  const updatedCount = result.meta.changes ?? 0
+
+  return jsonResponse({
+    ok: true,
+    oldCategory,
+    newCategory,
+    updatedCount,
+  })
 }
 
 export async function handleReorderGearItems(request: Request, env: Env) {

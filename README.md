@@ -9,6 +9,8 @@ bun install
 cp .dev.vars.example .dev.vars
 ```
 
+GitHub OAuth App を作成し、Authorization callback URL に `http://localhost:5173/api/auth/github/callback` を設定してください。
+
 ## 開発サーバー
 
 ```bash
@@ -55,5 +57,5 @@ bun run build
 - 画面表示名は `ICH`
 - Twitch / X / GitHub の外部リンクを掲載
 - 1ページ完結のSPA
-- 隠し管理モード（許可メール + 認証コード + access/refresh token）
+- 隠し管理モード（GitHub OAuth + access/refresh token）
 - URLからOG情報を取得して機材カードを追加

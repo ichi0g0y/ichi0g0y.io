@@ -2,9 +2,10 @@ export interface Env {
   ASSETS: Fetcher
   DB: D1Database
   ACCESS_TOKEN_SECRET: string
-  ALLOWED_EMAILS: string
+  GITHUB_CLIENT_ID: string
+  GITHUB_CLIENT_SECRET: string
+  ALLOWED_GITHUB_LOGINS: string
   APP_ORIGIN?: string
-  SHOW_DEV_AUTH_CODE?: string
 }
 
 export interface AccessTokenPayload {
@@ -24,6 +25,7 @@ export interface GearItem {
   title: string
   category: string
   imageUrl: string | null
+  imageUrls: string[]
   imageFit: 'cover' | 'contain'
   linkUrl: string | null
   description: string | null
