@@ -1,0 +1,456 @@
+import type { Env, GearItem } from './types'
+import { errorResponse, jsonResponse, nowSeconds, readJsonBody } from './utils'
+
+interface GearRow {
+  id: number
+  title: string
+  category: string
+  image_url: string | null
+  image_fit: 'cover' | 'contain'
+  link_url: string | null
+  description: string | null
+  sort_order: number
+  created_at: number
+  updated_at: number
+}
+
+interface LinkPreview {
+  url: string
+  title: string | null
+  description: string | null
+  imageUrl: string | null
+}
+
+const HTML_ENTITY_MAP: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+}
+
+const PREVIEW_FETCH_TIMEOUT_MS = 20_000
+
+function mapGearRow(row: GearRow): GearItem {
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category,
+    imageUrl: row.image_url,
+    imageFit: row.image_fit === 'cover' ? 'cover' : 'contain',
+    linkUrl: row.link_url,
+    description: row.description,
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function normalizeImageFit(value: unknown): GearItem['imageFit'] {
+  return value === 'cover' ? 'cover' : 'contain'
+}
+
+function extractMetaContent(html: string, key: string) {
+  const metaTagRegex = /<meta\s+[^>]*>/gi
+  const attrRegex = /([a-zA-Z:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g
+  const target = key.toLowerCase()
+  const matches = html.match(metaTagRegex) ?? []
+
+  for (const tag of matches) {
+    const attrs = new Map<string, string>()
+    let attrMatch: RegExpExecArray | null = attrRegex.exec(tag)
+    while (attrMatch) {
+      const attrName = attrMatch[1].toLowerCase()
+      const attrValue = attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? ''
+      attrs.set(attrName, attrValue)
+      attrMatch = attrRegex.exec(tag)
+    }
+    attrRegex.lastIndex = 0
+
+    const property = attrs.get('property')?.toLowerCase()
+    const name = attrs.get('name')?.toLowerCase()
+    const content = attrs.get('content')
+    if (!content) {
+      continue
+    }
+    if (property === target || name === target) {
+      return content
+    }
+  }
+
+  return null
+}
+
+function extractTitle(html: string) {
+  const match = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+  return match?.[1]?.trim() ?? null
+}
+
+function decodeHtmlEntities(value: string) {
+  return value.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (full, entity: string) => {
+    if (entity.startsWith('#x') || entity.startsWith('#X')) {
+      const codePoint = Number.parseInt(entity.slice(2), 16)
+      return Number.isNaN(codePoint) ? full : String.fromCodePoint(codePoint)
+    }
+
+    if (entity.startsWith('#')) {
+      const codePoint = Number.parseInt(entity.slice(1), 10)
+      return Number.isNaN(codePoint) ? full : String.fromCodePoint(codePoint)
+    }
+
+    return HTML_ENTITY_MAP[entity] ?? full
+  })
+}
+
+function normalizePreviewValue(value: string | null) {
+  if (!value) {
+    return null
+  }
+  const trimmed = decodeHtmlEntities(value).trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function isAmazonHost(hostname: string) {
+  return hostname === 'amzn.asia' || hostname.includes('amazon.')
+}
+
+function isAmazonGenericText(value: string | null) {
+  if (!value) {
+    return false
+  }
+  const normalized = value.trim().toLowerCase()
+  return normalized === 'amazon' || normalized === 'amazon.co.jp' || normalized === 'amazon.com'
+}
+
+function normalizeAmazonTitle(value: string | null) {
+  if (!value) {
+    return null
+  }
+
+  return value
+    .replace(/^amazon\.[^:]+:\s*/i, '')
+    .replace(/\s*:\s*[^:]+$/, '')
+    .trim()
+}
+
+function parseAttributes(tag: string) {
+  const attrRegex = /([a-zA-Z:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g
+  const attrs = new Map<string, string>()
+  let attrMatch: RegExpExecArray | null = attrRegex.exec(tag)
+
+  while (attrMatch) {
+    const attrName = attrMatch[1].toLowerCase()
+    const attrValue = attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? ''
+    attrs.set(attrName, attrValue)
+    attrMatch = attrRegex.exec(tag)
+  }
+
+  return attrs
+}
+
+function extractAmazonLandingImage(html: string) {
+  const match = html.match(/<img\s+[^>]*id=(["'])landingImage\1[^>]*>/i)
+  if (!match) {
+    return null
+  }
+
+  const attrs = parseAttributes(match[0])
+  return attrs.get('data-old-hires') ?? attrs.get('src') ?? null
+}
+
+function toAbsoluteUrl(value: string | null, base: URL) {
+  if (!value) {
+    return null
+  }
+  try {
+    return new URL(value, base).toString()
+  } catch {
+    return null
+  }
+}
+
+export async function fetchLinkPreview(url: string): Promise<LinkPreview> {
+  const target = new URL(url)
+  if (!['http:', 'https:'].includes(target.protocol)) {
+    throw new Error('http/https のURLのみ対応しています')
+  }
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), PREVIEW_FETCH_TIMEOUT_MS)
+
+  let response: Response
+  try {
+    response = await fetch(target.toString(), {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; ichi0g0y-bot/1.0)',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+    })
+  } finally {
+    clearTimeout(timer)
+  }
+
+  if (!response.ok) {
+    throw new Error(`URL取得に失敗しました (${response.status})`)
+  }
+
+  const finalUrl = response.url || target.toString()
+  const finalTarget = new URL(finalUrl)
+  const html = await response.text()
+
+  const ogTitle = normalizePreviewValue(extractMetaContent(html, 'og:title'))
+  const metaTitle = normalizePreviewValue(extractMetaContent(html, 'title'))
+  const pageTitle = normalizePreviewValue(extractTitle(html))
+  const ogDescription = normalizePreviewValue(extractMetaContent(html, 'og:description'))
+  const metaDescription = normalizePreviewValue(extractMetaContent(html, 'description'))
+  const ogImage = normalizePreviewValue(extractMetaContent(html, 'og:image'))
+
+  const useAmazonFallback = isAmazonHost(finalTarget.hostname) && isAmazonGenericText(ogTitle)
+  const titleRaw = useAmazonFallback ? metaTitle ?? pageTitle ?? ogTitle : ogTitle ?? metaTitle ?? pageTitle
+  const title = isAmazonHost(finalTarget.hostname) ? normalizeAmazonTitle(titleRaw) : titleRaw
+  const description = useAmazonFallback ? metaDescription ?? ogDescription : ogDescription ?? metaDescription
+
+  let imageUrl = toAbsoluteUrl(ogImage, finalTarget)
+  const isGenericAmazonImage = imageUrl?.includes('/share-icons/previewdoh/amazon.png') ?? false
+  if (useAmazonFallback && isGenericAmazonImage) {
+    imageUrl = toAbsoluteUrl(normalizePreviewValue(extractAmazonLandingImage(html)), finalTarget) ?? imageUrl
+  }
+
+  return {
+    url: finalUrl,
+    title,
+    description,
+    imageUrl,
+  }
+}
+
+export async function handleListGearItems(env: Env) {
+  const rows = await env.DB.prepare(
+    `
+      SELECT id, title, category, image_url, image_fit, link_url, description, sort_order, created_at, updated_at
+      FROM gear_items
+      ORDER BY sort_order ASC, id ASC
+    `,
+  ).all<GearRow>()
+
+  const items = (rows.results ?? []).map(mapGearRow)
+  return jsonResponse({ ok: true, items })
+}
+
+export async function handlePreview(request: Request) {
+  const url = new URL(request.url)
+  const target = url.searchParams.get('url')
+  if (!target) {
+    return errorResponse('url パラメータが必要です', 400)
+  }
+
+  try {
+    const preview = await fetchLinkPreview(target)
+    return jsonResponse({ ok: true, preview })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'URLプレビュー取得に失敗しました'
+    return errorResponse(message, 400)
+  }
+}
+
+export async function handleCreateGearFromUrl(request: Request, env: Env) {
+  const body = await readJsonBody<{
+    url?: string
+    title?: string
+    description?: string
+    category?: string
+    imageFit?: unknown
+  }>(request)
+  const inputUrl = body?.url?.trim()
+
+  if (!inputUrl) {
+    return errorResponse('URLを入力してください', 400)
+  }
+
+  let preview: LinkPreview
+  try {
+    preview = await fetchLinkPreview(inputUrl)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'リンク情報の取得に失敗しました'
+    return errorResponse(message, 400)
+  }
+
+  const now = nowSeconds()
+  const requestedCategory = body?.category?.trim()
+  const requestedTitle = body?.title?.trim()
+  const requestedDescriptionRaw = body?.description
+  const requestedDescription = typeof requestedDescriptionRaw === 'string' ? requestedDescriptionRaw.trim() : null
+  const requestedImageFit = body?.imageFit === undefined ? null : normalizeImageFit(body.imageFit)
+  const category = requestedCategory || '外部リンク'
+  const title = requestedTitle || preview.title || new URL(preview.url).hostname
+  const description = requestedDescription || preview.description
+  const imageFit = requestedImageFit ?? 'contain'
+
+  const existing = await env.DB.prepare(
+    `
+      SELECT id, title, category, image_url, image_fit, link_url, description, sort_order, created_at, updated_at
+      FROM gear_items
+      WHERE link_url = ?1 OR link_url = ?2
+      ORDER BY id DESC
+      LIMIT 1
+    `,
+  )
+    .bind(inputUrl, preview.url)
+    .first<GearRow>()
+
+  if (existing) {
+    const nextCategory = requestedCategory || existing.category
+    const nextImageFit = requestedImageFit ?? existing.image_fit
+    const updated = await env.DB.prepare(
+      `
+        UPDATE gear_items
+        SET title = ?1, category = ?2, image_url = ?3, image_fit = ?4, link_url = ?5, description = ?6, updated_at = ?7
+        WHERE id = ?8
+        RETURNING id, title, category, image_url, image_fit, link_url, description, sort_order, created_at, updated_at
+      `,
+    )
+      .bind(title, nextCategory, preview.imageUrl, nextImageFit, preview.url, description, now, existing.id)
+      .first<GearRow>()
+
+    if (!updated) {
+      return errorResponse('カード更新に失敗しました', 500)
+    }
+
+    return jsonResponse({ ok: true, item: mapGearRow(updated), preview })
+  }
+
+  const sortRow = await env.DB.prepare('SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM gear_items').first<{
+    max_sort: number
+  }>()
+  const nextSort = (sortRow?.max_sort ?? 0) + 10
+
+  const inserted = await env.DB.prepare(
+    `
+      INSERT INTO gear_items (title, category, image_url, image_fit, link_url, description, sort_order, created_at, updated_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+      RETURNING id, title, category, image_url, image_fit, link_url, description, sort_order, created_at, updated_at
+    `,
+  )
+    .bind(title, category, preview.imageUrl, imageFit, preview.url, description, nextSort, now, now)
+    .first<GearRow>()
+
+  if (!inserted) {
+    return errorResponse('カード作成に失敗しました', 500)
+  }
+
+  return jsonResponse({ ok: true, item: mapGearRow(inserted), preview })
+}
+
+export async function handleUpdateGearItem(request: Request, env: Env) {
+  const url = new URL(request.url)
+  const matched = url.pathname.match(/^\/api\/admin\/gear-items\/(\d+)$/)
+  const id = Number.parseInt(matched?.[1] ?? '', 10)
+  if (!Number.isFinite(id) || id <= 0) {
+    return errorResponse('更新対象のIDが不正です', 400)
+  }
+
+  const body = await readJsonBody<{ title?: string; description?: string; category?: string; imageFit?: unknown }>(request)
+  const existing = await env.DB.prepare(
+    `
+      SELECT id, title, category, image_url, image_fit, link_url, description, sort_order, created_at, updated_at
+      FROM gear_items
+      WHERE id = ?1
+      LIMIT 1
+    `,
+  )
+    .bind(id)
+    .first<GearRow>()
+
+  if (!existing) {
+    return errorResponse('対象のカードが見つかりません', 404)
+  }
+
+  const nextTitle = typeof body?.title === 'string' ? body.title.trim() : existing.title
+  if (!nextTitle) {
+    return errorResponse('タイトルを入力してください', 400)
+  }
+
+  const nextCategoryRaw = typeof body?.category === 'string' ? body.category.trim() : existing.category
+  const nextCategory = nextCategoryRaw || existing.category
+  const nextDescription =
+    typeof body?.description === 'string' ? (body.description.trim() || null) : existing.description
+  const nextImageFit = body?.imageFit === undefined ? existing.image_fit : normalizeImageFit(body.imageFit)
+
+  const now = nowSeconds()
+  const updated = await env.DB.prepare(
+    `
+      UPDATE gear_items
+      SET title = ?1, category = ?2, description = ?3, image_fit = ?4, updated_at = ?5
+      WHERE id = ?6
+      RETURNING id, title, category, image_url, image_fit, link_url, description, sort_order, created_at, updated_at
+    `,
+  )
+    .bind(nextTitle, nextCategory, nextDescription, nextImageFit, now, id)
+    .first<GearRow>()
+
+  if (!updated) {
+    return errorResponse('カード更新に失敗しました', 500)
+  }
+
+  return jsonResponse({ ok: true, item: mapGearRow(updated) })
+}
+
+export async function handleReorderGearItems(request: Request, env: Env) {
+  const body = await readJsonBody<{ orderedIds?: number[] }>(request)
+  const orderedIds = Array.isArray(body?.orderedIds) ? body.orderedIds : null
+
+  if (!orderedIds || orderedIds.length < 1) {
+    return errorResponse('並び順のID一覧が必要です', 400)
+  }
+
+  if (!orderedIds.every((id) => Number.isInteger(id) && id > 0)) {
+    return errorResponse('並び順のID一覧が不正です', 400)
+  }
+
+  const uniqueIds = new Set(orderedIds)
+  if (uniqueIds.size !== orderedIds.length) {
+    return errorResponse('並び順のID一覧に重複があります', 400)
+  }
+
+  const rows = await env.DB.prepare('SELECT id FROM gear_items ORDER BY sort_order ASC, id ASC').all<{ id: number }>()
+  const existingIds = (rows.results ?? []).map((row) => row.id)
+
+  if (existingIds.length !== orderedIds.length) {
+    return errorResponse('並び順の対象数が一致しません', 400)
+  }
+
+  const existingSet = new Set(existingIds)
+  const isSameSet = orderedIds.every((id) => existingSet.has(id))
+  if (!isSameSet) {
+    return errorResponse('並び順のID一覧に不明なIDがあります', 400)
+  }
+
+  const now = nowSeconds()
+  const statements = orderedIds.map((id, index) => {
+    const nextSort = (index + 1) * 10
+    return env.DB.prepare('UPDATE gear_items SET sort_order = ?1, updated_at = ?2 WHERE id = ?3').bind(nextSort, now, id)
+  })
+  await env.DB.batch(statements)
+
+  return jsonResponse({ ok: true, orderedIds })
+}
+
+export async function handleDeleteGearItem(request: Request, env: Env) {
+  const url = new URL(request.url)
+  const matched = url.pathname.match(/^\/api\/admin\/gear-items\/(\d+)$/)
+  const id = Number.parseInt(matched?.[1] ?? '', 10)
+
+  if (!Number.isFinite(id) || id <= 0) {
+    return errorResponse('削除対象のIDが不正です', 400)
+  }
+
+  const result = await env.DB.prepare('DELETE FROM gear_items WHERE id = ?1').bind(id).run()
+  const changes = result.meta.changes ?? 0
+  if (changes < 1) {
+    return errorResponse('対象のカードが見つかりません', 404)
+  }
+
+  return jsonResponse({ ok: true, id })
+}

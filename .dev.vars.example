@@ -1,0 +1,4 @@
+ACCESS_TOKEN_SECRET=replace-with-long-random-string
+ALLOWED_EMAILS=you@example.com,ichi0g0y@gmail.com
+APP_ORIGIN=http://localhost:5173
+SHOW_DEV_AUTH_CODE=1

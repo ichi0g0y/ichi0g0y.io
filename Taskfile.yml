@@ -1,0 +1,70 @@
+version: '3'
+
+tasks:
+  install:
+    desc: 依存関係をインストール
+    cmds:
+      - bun install
+
+  dev:
+    desc: 開発サーバー（Web + Worker API）を同時起動
+    deps:
+      - install
+    cmds:
+      - |
+        zsh -lc '
+        bun run worker:dev &
+        until nc -z 127.0.0.1 8787 >/dev/null 2>&1; do
+          sleep 0.2
+        done
+        bun run dev
+        '
+
+  dev-web:
+    desc: フロントエンド開発サーバーのみ起動
+    deps:
+      - install
+    cmds:
+      - bun run dev
+
+  worker-dev:
+    desc: Cloudflare Workers APIをローカル起動
+    deps:
+      - install
+    cmds:
+      - bun run worker:dev
+
+  d1-migrate-local:
+    desc: D1マイグレーションをローカル適用
+    deps:
+      - install
+    cmds:
+      - bun run d1:migrate:local
+
+  worker-deploy:
+    desc: Workersへデプロイ
+    deps:
+      - install
+    cmds:
+      - bun run worker:deploy
+
+  build:
+    desc: プロダクションビルド
+    deps:
+      - install
+    cmds:
+      - bun run build
+
+  lint:
+    desc: ESLintを実行
+    deps:
+      - install
+    cmds:
+      - bun run lint
+
+  preview:
+    desc: ビルド成果物をプレビュー
+    deps:
+      - build
+    cmds:
+      - bun run preview
