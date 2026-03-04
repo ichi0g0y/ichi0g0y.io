@@ -1,0 +1,78 @@
+.copyright {
+  margin: 6rem 0 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.language-toggle-button {
+  position: fixed;
+  left: 1rem;
+  bottom: 1rem;
+  z-index: 115;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #d5dbe4;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #475569;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.language-toggle-button:hover {
+  border-color: #b9c4d3;
+  background: #ffffff;
+}
+
+.language-toggle-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.language-toggle-code {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 9px;
+  line-height: 16px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.app-toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 120;
+  min-width: 240px;
+  max-width: min(420px, calc(100vw - 2rem));
+  border-radius: 10px;
+  border: 1px solid #d5dbe4;
+  background: #ffffff;
+  color: #334155;
+  padding: 0.6rem 0.76rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  box-shadow: 0 16px 30px -22px rgba(15, 23, 42, 0.85);
+}
+
+.app-toast.is-success {
+  border-color: #c9e4d2;
+  background: #f6fffa;
+  color: #166534;
+}
+
+.app-toast.is-error {
+  border-color: #eed5d7;
+  background: #fff9f9;
+  color: #9f1239;
+}

@@ -265,7 +265,7 @@ export async function handleGitHubOAuthCallback(request: Request, env: Env) {
 
   const identity = user.email ?? `github:${user.login}`
   const session = await issueAuthSession(identity, request, env)
-  return redirectResponse(getPostAuthRedirectUrl(request, env), [session.refreshCookie])
+  return redirectResponse(getPostAuthRedirectUrl(request, env), [session.refreshCookie, clearGitHubStateCookie(request)])
 }
 
 export async function handleRefresh(request: Request, env: Env) {
@@ -297,9 +297,9 @@ export async function handleRefresh(request: Request, env: Env) {
 
   const nextRefreshExpiresAt = now + REFRESH_TOKEN_TTL_SEC
 
-  // Refresh token rotation is intentionally disabled here to avoid race conditions on reload.
-  // In development (React StrictMode) and multi-tab usage, concurrent refresh requests could
-  // invalidate each other when rotating tokens, causing intermittent logouts.
+  // リフレッシュトークンローテーションは意図的に無効化。
+  // 開発環境（React StrictMode）やマルチタブ利用時に、同時リフレッシュリクエストが
+  // 互いのトークンを無効化し、断続的なログアウトを引き起こすのを防止するため。
   await env.DB.prepare(
     `
       UPDATE auth_sessions

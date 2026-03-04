@@ -1,5 +1,4 @@
-import { ChevronDownIcon, Cross2Icon, EyeOpenIcon, GlobeIcon, Pencil2Icon, PlusIcon } from '@radix-ui/react-icons'
-import { Command } from 'cmdk'
+import { Cross2Icon, EyeOpenIcon, GlobeIcon, Pencil2Icon, PlusIcon } from '@radix-ui/react-icons'
 import {
   useCallback,
   useEffect,
@@ -12,417 +11,26 @@ import {
   type SyntheticEvent,
 } from 'react'
 
-const links = [
-  {
-    label: 'GitHub',
-    href: 'https://github.com/ichi0g0y',
-    icon: '/icons/github.png',
-  },
-  {
-    label: 'Twitter',
-    href: 'https://x.com/ichi0g0y',
-    icon: '/icons/twitter.svg',
-  },
-  {
-    label: 'Discord',
-    href: 'https://discord.gg/Y4SGjwauNS',
-    icon: '/icons/discord.svg',
-  },
-  {
-    label: 'Dropbox',
-    href: 'https://www.dropbox.com/scl/fo/w38k8gn54kp681gv1nc8b/ADf0yoRtRXCLhwLOOZuhWp0?rlkey=eutco8gaj0zlkcg9iaqzlciqa&dl=0',
-    icon: '/icons/dropbox.svg',
-  },
-] as const
-
-type GearItem = {
-  id: number
-  title: string
-  titleEn?: string | null
-  category: string
-  categoryEn?: string | null
-  imageUrl: string | null
-  imageUrls: string[]
-  imageFit: 'cover' | 'contain'
-  linkUrl: string | null
-  description: string | null
-  descriptionEn?: string | null
-  sortOrder: number
-  createdAt: number
-  updatedAt: number
-}
-
-type ToastTone = 'success' | 'error' | 'info'
-type AddDialogStep = 'url' | 'edit'
-
-type LinkPreviewData = {
-  url?: string
-  title?: string | null
-  description?: string | null
-  imageUrl?: string | null
-  imageCandidates?: string[]
-}
-
-type ToastState = {
-  id: number
-  message: string
-  tone: ToastTone
-}
-
-type ImageSize = {
-  width: number
-  height: number
-}
-
-type AppLocale = 'ja' | 'en'
-
-const fallbackGearItems: GearItem[] = [
-  {
-    id: 1,
-    title: 'Ryzen 9 7950X3D',
-    category: 'ゲーミングPC',
-    imageUrl: '/gear/gaming-pc.jpg',
-    imageUrls: ['/gear/gaming-pc.jpg'],
-    imageFit: 'cover',
-    linkUrl: null,
-    description: null,
-    sortOrder: 10,
-    createdAt: 0,
-    updatedAt: 0,
-  },
-  {
-    id: 2,
-    title: 'ASUS RTX4070ti Super',
-    category: 'ゲーミングPC',
-    imageUrl: '/gear/gaming-pc.jpg',
-    imageUrls: ['/gear/gaming-pc.jpg'],
-    imageFit: 'cover',
-    linkUrl: null,
-    description: null,
-    sortOrder: 20,
-    createdAt: 0,
-    updatedAt: 0,
-  },
-  {
-    id: 3,
-    title: 'DDR5 64GB',
-    category: 'ゲーミングPC',
-    imageUrl: '/gear/gaming-pc.jpg',
-    imageUrls: ['/gear/gaming-pc.jpg'],
-    imageFit: 'cover',
-    linkUrl: null,
-    description: null,
-    sortOrder: 30,
-    createdAt: 0,
-    updatedAt: 0,
-  },
-  {
-    id: 4,
-    title: 'Mac Strudio M4 Max 64GB',
-    category: '配信機材',
-    imageUrl: '/gear/stream-audio.jpg',
-    imageUrls: ['/gear/stream-audio.jpg'],
-    imageFit: 'cover',
-    linkUrl: null,
-    description: null,
-    sortOrder: 40,
-    createdAt: 0,
-    updatedAt: 0,
-  },
-  {
-    id: 5,
-    title: 'BabyFace Pro fs',
-    category: '配信機材',
-    imageUrl: '/gear/stream-audio.jpg',
-    imageUrls: ['/gear/stream-audio.jpg'],
-    imageFit: 'cover',
-    linkUrl: null,
-    description: null,
-    sortOrder: 50,
-    createdAt: 0,
-    updatedAt: 0,
-  },
-  {
-    id: 6,
-    title: 'SM7B',
-    category: '配信機材',
-    imageUrl: '/gear/stream-audio.jpg',
-    imageUrls: ['/gear/stream-audio.jpg'],
-    imageFit: 'cover',
-    linkUrl: null,
-    description: null,
-    sortOrder: 60,
-    createdAt: 0,
-    updatedAt: 0,
-  },
-]
-
-const TYPE_START_DELAY_MS = 360
-const BASE_TYPE_SPEED_MS = 24
-const TYPE_SPEED_RANDOM_MS = 42
-const PUNCTUATION_PAUSE_MS = 130
-const HIDDEN_TAP_TARGET = 5
-const HIDDEN_TAP_WINDOW_MS = 1800
-const TWITCH_CHANNEL = 'ichi0g0y'
-const DEFAULT_NEW_GEAR_CATEGORY = 'その他'
-const APP_LOCALE_STORAGE_KEY = 'app-locale'
-// 手動切り替え: 配信中なら true、オフラインなら false
-const IS_LIVE = true
-
-const UI_LABELS = {
-  ja: {
-    modeEdit: '編集モード',
-    modeView: '閲覧モード',
-    offlineTitle: '現在はオフラインです',
-    offlineText: '次の配信まで少し待っててください。',
-    picksHeading: 'Picks',
-    picksDescription: '配信と制作で使っている機材や好きなものをまとめています。',
-    affiliateNote: '**リンクはアフィリエイトではありません**',
-    allCategory: 'すべて',
-    gearLoading: '機材情報を読み込み中...',
-    noItems: '選択中のカテゴリには機材がありません。',
-    languageAria: '英語に切り替え',
-  },
-  en: {
-    modeEdit: 'Edit mode',
-    modeView: 'View mode',
-    offlineTitle: 'Currently offline',
-    offlineText: 'Please check back for the next stream.',
-    picksHeading: 'Picks',
-    picksDescription: 'A collection of gear and favorite things I use for streaming and creating.',
-    affiliateNote: '**These links are not affiliate links**',
-    allCategory: 'All',
-    gearLoading: 'Loading picks...',
-    noItems: 'No items in the selected category.',
-    languageAria: '日本語に切り替え',
-  },
-} as const
-
-function getGreetingByHour(date: Date, locale: AppLocale) {
-  const hour = date.getHours()
-
-  if (locale === 'en') {
-    if (hour >= 4 && hour < 11) {
-      return 'Good morning'
-    }
-    if (hour >= 11 && hour < 18) {
-      return 'Hello'
-    }
-    return 'Good evening'
-  }
-
-  if (hour >= 4 && hour < 11) {
-    return 'おはようございます'
-  }
-
-  if (hour >= 11 && hour < 18) {
-    return 'こんにちは'
-  }
-
-  return 'こんばんは'
-}
-
-function createIntroMessage(locale: AppLocale) {
-  const greeting = getGreetingByHour(new Date(), locale)
-
-  if (locale === 'en') {
-    return `${greeting},\n\nI'm ICH.\n\nI'm a casual programmer based in Hyogo, Japan. On GitHub, I build vibe-coded projects, and on Twitch I stream work chats, retro console mods, and various games from time to time.\n\nI like making things slowly and playing games lazily. Feel free to say hi anytime.`
-  }
-
-  return `${greeting}、\n\nICH (いち) ともうします。\n\n兵庫在住のライトプログラマー。GitHubではバイブコーディングを中心に制作し、Twitchでは作業雑談やレトロゲーム機の改造配信、各種ゲーム配信を不定期で行っています。\n\nゆるく作って、だらだら遊ぶのが好きです。気になったら気軽に声をかけてください。`
-}
-
-function getAuthErrorMessage(errorCode: string) {
-  switch (errorCode) {
-    case 'oauth_denied':
-      return 'GitHubログインがキャンセルされました。'
-    case 'state_mismatch':
-      return 'ログイン処理の整合性チェックに失敗しました。再試行してください。'
-    case 'token_exchange_failed':
-      return 'GitHubとの認証連携に失敗しました。'
-    case 'github_user_failed':
-      return 'GitHubアカウント情報の取得に失敗しました。'
-    case 'forbidden_user':
-      return 'このGitHubアカウントは管理モードに許可されていません。'
-    default:
-      return 'ログインに失敗しました。'
-  }
-}
-
-function normalizeImageFit(value: unknown): GearItem['imageFit'] {
-  return value === 'cover' ? 'cover' : 'contain'
-}
-
-function normalizeImageUrls(values: unknown, fallbackImageUrl: string | null) {
-  const resolved = Array.isArray(values) ? values : []
-  const normalized: string[] = []
-  const seen = new Set<string>()
-
-  for (const value of resolved) {
-    if (typeof value !== 'string') {
-      continue
-    }
-    const trimmed = value.trim()
-    if (!trimmed || seen.has(trimmed)) {
-      continue
-    }
-    seen.add(trimmed)
-    normalized.push(trimmed)
-  }
-
-  const fallback = typeof fallbackImageUrl === 'string' ? fallbackImageUrl.trim() : ''
-  if (fallback && !seen.has(fallback)) {
-    normalized.unshift(fallback)
-  }
-
-  return normalized
-}
-
-function normalizeGearItem(item: GearItem): GearItem {
-  const imageUrls = normalizeImageUrls(item.imageUrls, item.imageUrl)
-  return {
-    ...item,
-    titleEn: item.titleEn ?? null,
-    categoryEn: item.categoryEn ?? null,
-    imageUrl: imageUrls[0] ?? null,
-    imageUrls,
-    imageFit: normalizeImageFit(item.imageFit),
-    descriptionEn: item.descriptionEn ?? null,
-  }
-}
-
-type ImageFitSwitchProps = {
-  checked: boolean
-  onCheckedChange: (nextChecked: boolean) => void
-}
-
-function ImageFitSwitch({ checked, onCheckedChange }: ImageFitSwitchProps) {
-  return (
-    <button
-      className={`image-fit-switch${checked ? ' is-on' : ''}`}
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onCheckedChange(!checked)}
-    >
-      <span className="image-fit-switch-thumb" aria-hidden="true" />
-    </button>
-  )
-}
-
-type CategoryCommandFieldProps = {
-  value: string
-  options: string[]
-  onValueChange: (nextValue: string) => void
-  placeholder?: string
-}
-
-function CategoryCommandField({ value, options, onValueChange, placeholder }: CategoryCommandFieldProps) {
-  const normalizedOptions = useMemo(
-    () => Array.from(new Set(options.map((option) => option.trim()).filter((option) => option.length > 0))),
-    [options],
-  )
-  const rootRef = useRef<HTMLDivElement | null>(null)
-  const inputRef = useRef<HTMLInputElement | null>(null)
-  const suppressOpenOnFocusRef = useRef(false)
-  const [isOpen, setIsOpen] = useState(false)
-
-  const handleSelectCategory = useCallback(
-    (category: string) => {
-      suppressOpenOnFocusRef.current = true
-      onValueChange(category)
-      setIsOpen(false)
-      inputRef.current?.blur()
-      window.setTimeout(() => {
-        suppressOpenOnFocusRef.current = false
-      }, 0)
-    },
-    [onValueChange],
-  )
-
-  useEffect(() => {
-    if (!isOpen) {
-      return
-    }
-
-    const handlePointerDown = (event: globalThis.MouseEvent) => {
-      if (!rootRef.current) {
-        return
-      }
-      if (!rootRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
-      }
-    }
-
-    window.addEventListener('mousedown', handlePointerDown)
-    return () => {
-      window.removeEventListener('mousedown', handlePointerDown)
-    }
-  }, [isOpen])
-
-  return (
-    <div ref={rootRef} className={`category-combobox${isOpen ? ' is-open' : ''}`}>
-      <Command className="category-command" shouldFilter={false}>
-        <div className="category-command-control">
-          <Command.Input
-            ref={inputRef}
-            className="category-command-input"
-            value={value}
-            onValueChange={onValueChange}
-            onFocus={() => {
-              if (suppressOpenOnFocusRef.current) {
-                return
-              }
-              setIsOpen(true)
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                setIsOpen(false)
-              }
-              if (event.key === 'ArrowDown' && !isOpen) {
-                setIsOpen(true)
-              }
-            }}
-            placeholder={placeholder ?? 'カテゴリを入力'}
-          />
-          <button
-            className="category-command-trigger"
-            type="button"
-            aria-label="カテゴリ候補を開く"
-            onClick={() => {
-              setIsOpen((prev) => !prev)
-              if (!isOpen) {
-                inputRef.current?.focus()
-              }
-            }}
-          >
-            <ChevronDownIcon />
-          </button>
-        </div>
-
-        {isOpen ? (
-          <Command.List className="category-command-list">
-            <Command.Empty className="category-command-empty">候補がありません</Command.Empty>
-            {normalizedOptions.map((category) => (
-              <Command.Item
-                key={category}
-                value={category}
-                className="category-command-item"
-                onSelect={() => handleSelectCategory(category)}
-                onMouseDown={(event) => {
-                  event.preventDefault()
-                }}
-                onClick={() => handleSelectCategory(category)}
-              >
-                {category}
-              </Command.Item>
-            ))}
-          </Command.List>
-        ) : null}
-      </Command>
-    </div>
-  )
-}
+import { AddGearDialog } from './components/AddGearDialog'
+import { AuthDialog } from './components/AuthDialog'
+import { DeleteConfirmDialog } from './components/DeleteConfirmDialog'
+import { EditGearDialog } from './components/EditGearDialog'
+import { RenameCategoryDialog } from './components/RenameCategoryDialog'
+import {
+  APP_LOCALE_STORAGE_KEY,
+  DEFAULT_NEW_GEAR_CATEGORY,
+  HIDDEN_TAP_TARGET,
+  HIDDEN_TAP_WINDOW_MS,
+  IS_LIVE,
+  TWITCH_CHANNEL,
+  UI_LABELS,
+  fallbackGearItems,
+  links,
+} from './constants'
+import { useToast } from './hooks/useToast'
+import { useTypewriter } from './hooks/useTypewriter'
+import type { AddDialogStep, AppLocale, GearItem, ImageSize, LinkPreviewData } from './types'
+import { createIntroMessage, getAuthErrorMessage, normalizeGearItem, normalizeImageUrls } from './utils'
 
 function App() {
   const [language, setLanguage] = useState<AppLocale>(() => {
@@ -442,7 +50,8 @@ function App() {
     const parent = window.location.hostname || 'localhost'
     return `https://player.twitch.tv/?channel=${TWITCH_CHANNEL}&parent=${parent}&muted=true`
   }, [])
-  const [typedChars, setTypedChars] = useState<string[]>([])
+  const typedChars = useTypewriter(introChars)
+  const { toast, setToast, showToast } = useToast()
   const [gearItems, setGearItems] = useState<GearItem[]>(fallbackGearItems)
   const [isGearLoading, setIsGearLoading] = useState(true)
   const [accessToken, setAccessToken] = useState<string | null>(null)
@@ -484,7 +93,6 @@ function App() {
   const [isFetchingEditPreview, setIsFetchingEditPreview] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState('all')
-  const [toast, setToast] = useState<ToastState | null>(null)
   const [gearImageIndexes, setGearImageIndexes] = useState<Record<number, number>>({})
   const [renameCategoryTarget, setRenameCategoryTarget] = useState<string | null>(null)
   const [renameCategoryValue, setRenameCategoryValue] = useState('')
@@ -537,10 +145,6 @@ function App() {
     window.localStorage.setItem(APP_LOCALE_STORAGE_KEY, language)
   }, [language])
   const newGearPrimaryImageUrl = newGearImageUrls[0] ?? null
-
-  const showToast = useCallback((message: string, tone: ToastTone = 'info') => {
-    setToast({ id: Date.now(), message, tone })
-  }, [])
 
   const handlePreviewImageLoad = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
     const image = event.currentTarget
@@ -624,39 +228,6 @@ function App() {
   }, [parseApiResponse, sortGearItems])
 
   useEffect(() => {
-    let nextTypeTimer: ReturnType<typeof setTimeout> | null = null
-    setTypedChars([])
-
-    const typeStartTimer = setTimeout(() => {
-      let index = 0
-
-      const typeNext = () => {
-        const nextChar = introChars[index]
-        setTypedChars((previous) => [...previous, nextChar])
-        index += 1
-
-        if (index >= introChars.length) {
-          return
-        }
-
-        const isPunctuation = /[、。,.!?]/.test(nextChar)
-        const jitter = Math.floor(Math.random() * TYPE_SPEED_RANDOM_MS)
-        const delay = BASE_TYPE_SPEED_MS + jitter + (isPunctuation ? PUNCTUATION_PAUSE_MS : 0)
-        nextTypeTimer = setTimeout(typeNext, delay)
-      }
-
-      typeNext()
-    }, TYPE_START_DELAY_MS)
-
-    return () => {
-      clearTimeout(typeStartTimer)
-      if (nextTypeTimer) {
-        clearTimeout(nextTypeTimer)
-      }
-    }
-  }, [introChars])
-
-  useEffect(() => {
     void loadGearItems()
     void refreshAccessToken()
   }, [loadGearItems, refreshAccessToken])
@@ -681,18 +252,6 @@ function App() {
       setSelectedCategory('all')
     }
   }, [categoryOptions, selectedCategory])
-
-  useEffect(() => {
-    if (!toast) {
-      return
-    }
-    const timer = setTimeout(() => {
-      setToast((current) => (current?.id === toast.id ? null : current))
-    }, 2800)
-    return () => {
-      clearTimeout(timer)
-    }
-  }, [toast])
 
   useEffect(() => {
     if (!isAddFormOpen || addDialogStep !== 'url') {
@@ -816,7 +375,7 @@ function App() {
     } finally {
       setIsAuthBusy(false)
     }
-  }, [])
+  }, [setToast])
 
   const openEditGearItem = useCallback((item: GearItem) => {
     setEditingGearId(item.id)
@@ -899,8 +458,15 @@ function App() {
           body: JSON.stringify({ oldCategory, newCategory }),
         })
         const updatedCount = typeof data.updatedCount === 'number' ? data.updatedCount : null
+        const newCategoryEn = typeof data.newCategoryEn === 'string' ? data.newCategoryEn : null
         setGearItems((previous) =>
-          sortGearItems(previous.map((entry) => (entry.category === oldCategory ? { ...entry, category: newCategory } : entry))),
+          sortGearItems(
+            previous.map((entry) =>
+              entry.category === oldCategory
+                ? { ...entry, category: newCategory, ...(newCategoryEn != null ? { categoryEn: newCategoryEn } : {}) }
+                : entry,
+            ),
+          ),
         )
         setSelectedCategory((previous) => (previous === oldCategory ? newCategory : previous))
         setRenameCategoryTarget(null)
@@ -1373,8 +939,9 @@ function App() {
       setIsUpdating(true)
 
       try {
+        let renameNewCategoryEn: string | null = null
         if (shouldRenameCategoryGlobally) {
-          await requestWithAuth('/api/admin/gear-categories/rename', {
+          const renameData = await requestWithAuth('/api/admin/gear-categories/rename', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1382,6 +949,7 @@ function App() {
               newCategory: nextCategory,
             }),
           })
+          renameNewCategoryEn = typeof renameData.newCategoryEn === 'string' ? renameData.newCategoryEn : null
         }
 
         const data = await requestWithAuth(`/api/admin/gear-items/${editingGearId}`, {
@@ -1401,7 +969,11 @@ function App() {
         }
         setGearItems((previous) => {
           const renamedItems = shouldRenameCategoryGlobally
-            ? previous.map((entry) => (entry.category === oldCategory ? { ...entry, category: nextCategory } : entry))
+            ? previous.map((entry) =>
+                entry.category === oldCategory
+                  ? { ...entry, category: nextCategory, ...(renameNewCategoryEn != null ? { categoryEn: renameNewCategoryEn } : {}) }
+                  : entry,
+              )
             : previous
 
           return sortGearItems(
@@ -1781,7 +1353,7 @@ function App() {
                       onClick={(event) => handleSwitchGearImage(event, item, -1)}
                       aria-label={language === 'en' ? `Previous image for ${itemTitle}` : `${itemTitle} の前の画像`}
                     >
-                      ‹
+                      &#x2039;
                     </button>
                     <button
                       type="button"
@@ -1793,7 +1365,7 @@ function App() {
                       onClick={(event) => handleSwitchGearImage(event, item, 1)}
                       aria-label={language === 'en' ? `Next image for ${itemTitle}` : `${itemTitle} の次の画像`}
                     >
-                      ›
+                      &#x203A;
                     </button>
                     <div
                       className="gear-image-dots"
@@ -1894,525 +1466,107 @@ function App() {
       </section>
 
       {isAdminEditing && isAddFormOpen ? (
-        <div className="auth-dialog-backdrop" role="presentation">
-          <section
-            className="auth-dialog gear-add-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-label={addDialogStep === 'url' ? '機材URLを入力' : '機材カードを追加'}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="auth-dialog-header">
-              <p className="auth-dialog-title">{addDialogStep === 'url' ? 'URLを入力' : '機材カードを追加'}</p>
-              <button
-                className="auth-dialog-close"
-                type="button"
-                onClick={handleCloseAddDialog}
-                disabled={isAdding || isFetchingPreview}
-                aria-label="閉じる"
-              >
-                <Cross2Icon />
-              </button>
-            </div>
-
-            {addDialogStep === 'url' ? (
-              <form className="admin-form add-form" onSubmit={handleLoadPreviewForAddDialog}>
-                <label className="admin-label">
-                  URL
-                  <input
-                    ref={addDialogUrlInputRef}
-                    className="admin-input"
-                    type="url"
-                    value={newGearUrl}
-                    onChange={(event) => setNewGearUrl(event.target.value)}
-                    placeholder="https://..."
-                    required
-                  />
-                </label>
-                <p className="add-dialog-note">次へを押すとリンク情報を取得し、編集画面へ進みます。</p>
-                <div className="admin-form-actions">
-                  <button className="admin-button ghost" type="button" onClick={handleCloseAddDialog} disabled={isFetchingPreview}>
-                    キャンセル
-                  </button>
-                  <button className="admin-button" type="submit" disabled={isFetchingPreview}>
-                    {isFetchingPreview ? '取得中...' : '次へ'}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <form className="admin-form add-form" onSubmit={handleCreateGearFromUrl}>
-                <label className="admin-label">
-                  URL
-                  <input
-                    className="admin-input"
-                    type="url"
-                    value={newGearUrl}
-                    onChange={(event) => setNewGearUrl(event.target.value)}
-                    placeholder="https://..."
-                    required
-                  />
-                </label>
-                <label className="admin-label">
-                  タイトル（任意）
-                  <input
-                    className="admin-input"
-                    type="text"
-                    value={newGearTitle}
-                    onChange={(event) => setNewGearTitle(event.target.value)}
-                    placeholder="カードタイトル"
-                  />
-                </label>
-                <label className="admin-label">
-                  説明（任意）
-                  <textarea
-                    className="admin-textarea"
-                    value={newGearDescription}
-                    onChange={(event) => setNewGearDescription(event.target.value)}
-                    placeholder="説明文"
-                  />
-                </label>
-                <label className="admin-label">
-                  カテゴリ
-                  <CategoryCommandField
-                    value={newGearCategory}
-                    options={categoryOptions}
-                    onValueChange={setNewGearCategory}
-                    placeholder="カテゴリを入力（候補から選択可）"
-                  />
-                </label>
-                <div className={`selected-image-preview${newGearImageFit === 'contain' ? ' is-contain' : ''}`}>
-                  {newGearPrimaryImageUrl ? (
-                    <>
-                      <img
-                        src={newGearPrimaryImageUrl}
-                        alt="選択中の候補画像"
-                        loading="lazy"
-                        className={newGearImageFit === 'contain' ? 'is-contain' : ''}
-                        data-size-key={newGearPrimaryImageUrl}
-                        onLoad={handlePreviewImageLoad}
-                      />
-                      {getImageSizeLabel(newGearPrimaryImageUrl) ? (
-                        <span className="preview-image-size">{getImageSizeLabel(newGearPrimaryImageUrl)}</span>
-                      ) : null}
-                    </>
-                  ) : (
-                    <p className="selected-image-empty">画像は設定しません。</p>
-                  )}
-                </div>
-                <p className="selected-image-summary">
-                  {newGearImageUrls.length > 0
-                    ? `${newGearImageUrls.length}枚選択中（1枚目がサムネイル表示されます）`
-                    : '画像は未選択です。'}
-                </p>
-                {newGearImageCandidates.length > 0 ? (
-                  <div className="image-candidate-grid">
-                    {newGearImageCandidates.map((candidateUrl, index) => {
-                      const sizeLabel = getImageSizeLabel(candidateUrl)
-                      return (
-                        <button
-                          key={`${candidateUrl}-${index}`}
-                          className={`image-candidate-button${newGearImageUrlSet.has(candidateUrl) ? ' is-selected' : ''}`}
-                          type="button"
-                          onClick={() => handleToggleNewGearImageUrl(candidateUrl)}
-                          aria-label={`候補画像 ${index + 1} を${newGearImageUrlSet.has(candidateUrl) ? '解除' : '選択'}`}
-                        >
-                          <img
-                            src={candidateUrl}
-                            alt={`候補画像 ${index + 1}`}
-                            loading="lazy"
-                            className={newGearImageFit === 'contain' ? 'is-contain' : ''}
-                            data-size-key={candidateUrl}
-                            onLoad={handlePreviewImageLoad}
-                          />
-                          {sizeLabel ? <span className="preview-image-size">{sizeLabel}</span> : null}
-                        </button>
-                      )
-                    })}
-                  </div>
-                ) : null}
-                <button
-                  className={`image-candidate-none${newGearImageUrls.length < 1 ? ' is-selected' : ''}`}
-                  type="button"
-                  onClick={() => setNewGearImageUrls([])}
-                >
-                  画像を設定しない
-                </button>
-                <label className="admin-label">
-                  画像表示
-                  <div className="admin-switch-row">
-                    <span className="admin-switch-text">
-                      {newGearImageFit === 'contain' ? '画像を収める' : '領域全体に表示'}
-                    </span>
-                    <ImageFitSwitch
-                      checked={newGearImageFit === 'contain'}
-                      onCheckedChange={(nextChecked) => setNewGearImageFit(nextChecked ? 'contain' : 'cover')}
-                    />
-                  </div>
-                </label>
-                <div className="admin-form-actions">
-                  <button
-                    className="admin-button ghost"
-                    type="button"
-                    onClick={() => setAddDialogStep('url')}
-                    disabled={isAdding}
-                  >
-                    戻る
-                  </button>
-                  <button className="admin-button" type="submit" disabled={isAdding}>
-                    {isAdding ? '追加中...' : 'カード追加'}
-                  </button>
-                </div>
-              </form>
-            )}
-          </section>
-        </div>
+        <AddGearDialog
+          addDialogStep={addDialogStep}
+          newGearUrl={newGearUrl}
+          newGearTitle={newGearTitle}
+          newGearDescription={newGearDescription}
+          newGearCategory={newGearCategory}
+          newGearImageUrls={newGearImageUrls}
+          newGearImageCandidates={newGearImageCandidates}
+          newGearImageFit={newGearImageFit}
+          newGearImageUrlSet={newGearImageUrlSet}
+          newGearPrimaryImageUrl={newGearPrimaryImageUrl}
+          categoryOptions={categoryOptions}
+          isFetchingPreview={isFetchingPreview}
+          isAdding={isAdding}
+          imageSizesByUrl={imageSizesByUrl}
+          addDialogUrlInputRef={addDialogUrlInputRef}
+          onClose={handleCloseAddDialog}
+          onSetNewGearUrl={setNewGearUrl}
+          onSetNewGearTitle={setNewGearTitle}
+          onSetNewGearDescription={setNewGearDescription}
+          onSetNewGearCategory={setNewGearCategory}
+          onSetNewGearImageUrls={setNewGearImageUrls}
+          onSetNewGearImageFit={setNewGearImageFit}
+          onSetAddDialogStep={setAddDialogStep}
+          onLoadPreview={handleLoadPreviewForAddDialog}
+          onCreateGear={handleCreateGearFromUrl}
+          onToggleImageUrl={handleToggleNewGearImageUrl}
+          onPreviewImageLoad={handlePreviewImageLoad}
+          getImageSizeLabel={getImageSizeLabel}
+        />
       ) : null}
 
       {isAdminEditing && editingGearId ? (
-        <div className="auth-dialog-backdrop" role="presentation" onClick={handleCloseEditDialog}>
-          <section
-            className="auth-dialog gear-edit-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-label="カードを編集"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="auth-dialog-header">
-              <p className="auth-dialog-title">カードを編集</p>
-              <button
-                className="auth-dialog-close"
-                type="button"
-                onClick={handleCloseEditDialog}
-                disabled={isUpdating}
-                aria-label="閉じる"
-              >
-                <Cross2Icon />
-              </button>
-            </div>
-
-            <form className="admin-form add-form" onSubmit={handleUpdateGearItem}>
-              <label className="admin-label">
-                タイトル
-                <input
-                  className="admin-input"
-                  type="text"
-                  value={editTitle}
-                  onChange={(event) => setEditTitle(event.target.value)}
-                  placeholder="カードタイトル"
-                  required
-                />
-              </label>
-              <label className="admin-label">
-                説明
-                <textarea
-                  className="admin-textarea"
-                  value={editDescription}
-                  onChange={(event) => setEditDescription(event.target.value)}
-                  placeholder="説明文"
-                />
-              </label>
-              <label className="admin-label">
-                カテゴリ
-                <CategoryCommandField
-                  value={editCategory}
-                  options={categoryOptions}
-                  onValueChange={setEditCategory}
-                  placeholder="カテゴリを入力（候補から選択可）"
-                />
-              </label>
-              <p className="add-dialog-note">カテゴリ名を変えると、同じカテゴリの他カードにも一括反映されます。</p>
-              <label className="admin-label">
-                画像（任意）
-                <div className="edit-image-fetch-row">
-                  <input
-                    className="admin-input"
-                    type="url"
-                    value={editPreviewUrl}
-                    onChange={(event) => setEditPreviewUrl(event.target.value)}
-                    placeholder="候補取得元URL（https://...）"
-                  />
-                  <button
-                    className="admin-button ghost"
-                    type="button"
-                    onClick={() => {
-                      void handleFetchEditImageCandidates()
-                    }}
-                    disabled={isUpdating || isFetchingEditPreview}
-                  >
-                    {isFetchingEditPreview ? '取得中...' : '候補画像を再取得'}
-                  </button>
-                </div>
-                {editImageCandidates.length > 0 ? (
-                  <div className="image-candidate-grid">
-                    {editImageCandidates.map((candidateUrl, index) => {
-                      const sizeLabel = getImageSizeLabel(candidateUrl)
-                      return (
-                        <button
-                          key={`${candidateUrl}-${index}`}
-                          className={`image-candidate-button${editImageUrlSet.has(candidateUrl) ? ' is-selected' : ''}`}
-                          type="button"
-                          onClick={() => handleToggleEditImageUrl(candidateUrl)}
-                          aria-label={`候補画像 ${index + 1} を${editImageUrlSet.has(candidateUrl) ? '解除' : '選択'}`}
-                        >
-                          <img
-                            src={candidateUrl}
-                            alt={`候補画像 ${index + 1}`}
-                            loading="lazy"
-                            className={editImageFit === 'contain' ? 'is-contain' : ''}
-                            data-size-key={candidateUrl}
-                            onLoad={handlePreviewImageLoad}
-                          />
-                          {sizeLabel ? <span className="preview-image-size">{sizeLabel}</span> : null}
-                        </button>
-                      )
-                    })}
-                  </div>
-                ) : null}
-                <div className="edit-image-controls">
-                  <input
-                    className="admin-input"
-                    type="url"
-                    value={editImageUrlInput}
-                    onChange={(event) => setEditImageUrlInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault()
-                        handleAddEditImageUrl()
-                      }
-                    }}
-                    placeholder="https://..."
-                  />
-                  <button
-                    className="admin-button ghost"
-                    type="button"
-                    onClick={handleAddEditImageUrl}
-                    disabled={isUpdating || isFetchingEditPreview}
-                  >
-                    画像を追加
-                  </button>
-                </div>
-                {editImageUrls.length > 0 ? (
-                  <div className="edit-image-grid">
-                    {editImageUrls.map((url, index) => (
-                      <div
-                        key={`${url}-${index}`}
-                        className={`edit-image-item${index === 0 ? ' is-primary' : ''}${editDraggingImageIndex === index ? ' is-dragging' : ''}${editDragOverImageIndex === index ? ' is-drop-target' : ''}`}
-                        draggable={!isUpdating}
-                        onDragStart={(event) => handleEditImageDragStart(event, index)}
-                        onDragOver={(event) => handleEditImageDragOver(event, index)}
-                        onDrop={(event) => handleEditImageDrop(event, index)}
-                        onDragEnd={handleEditImageDragEnd}
-                      >
-                        <button
-                          type="button"
-                          className={`edit-image-thumb${editImageFit === 'contain' ? ' is-contain' : ''}`}
-                          onClick={() => handlePromoteEditImage(index)}
-                          disabled={index === 0 || isUpdating}
-                          aria-label={index === 0 ? 'メイン画像' : `${index + 1}枚目をメイン画像にする`}
-                        >
-                          <img
-                            src={url}
-                            alt={`編集画像 ${index + 1}`}
-                            loading="lazy"
-                            className={editImageFit === 'contain' ? 'is-contain' : ''}
-                            data-size-key={url}
-                            onLoad={handlePreviewImageLoad}
-                          />
-                          {getImageSizeLabel(url) ? <span className="preview-image-size">{getImageSizeLabel(url)}</span> : null}
-                        </button>
-                        <div className="edit-image-actions">
-                          <button
-                            className="admin-button ghost"
-                            type="button"
-                            onClick={() => handlePromoteEditImage(index)}
-                            disabled={index === 0 || isUpdating}
-                          >
-                            先頭にする
-                          </button>
-                          <button
-                            className="admin-button danger"
-                            type="button"
-                            onClick={() => handleRemoveEditImage(index)}
-                            disabled={isUpdating}
-                          >
-                            削除
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="selected-image-empty">画像は設定しません。</p>
-                )}
-                <p className="selected-image-summary">1枚目がカードの表示画像になります。</p>
-              </label>
-              <label className="admin-label">
-                画像表示
-                <div className="admin-switch-row">
-                  <span className="admin-switch-text">{editImageFit === 'contain' ? '画像を収める' : '領域全体に表示'}</span>
-                  <ImageFitSwitch
-                    checked={editImageFit === 'contain'}
-                    onCheckedChange={(nextChecked) => setEditImageFit(nextChecked ? 'contain' : 'cover')}
-                  />
-                </div>
-              </label>
-              <div className="admin-form-actions">
-                <button className="admin-button ghost" type="button" onClick={handleCloseEditDialog} disabled={isUpdating}>
-                  キャンセル
-                </button>
-                <button className="admin-button" type="submit" disabled={isUpdating}>
-                  {isUpdating ? '更新中...' : 'カード更新'}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
+        <EditGearDialog
+          editTitle={editTitle}
+          editDescription={editDescription}
+          editCategory={editCategory}
+          editImageUrls={editImageUrls}
+          editImageUrlInput={editImageUrlInput}
+          editImageCandidates={editImageCandidates}
+          editImageFit={editImageFit}
+          editImageUrlSet={editImageUrlSet}
+          editPreviewUrl={editPreviewUrl}
+          editDraggingImageIndex={editDraggingImageIndex}
+          editDragOverImageIndex={editDragOverImageIndex}
+          categoryOptions={categoryOptions}
+          isUpdating={isUpdating}
+          isFetchingEditPreview={isFetchingEditPreview}
+          imageSizesByUrl={imageSizesByUrl}
+          onClose={handleCloseEditDialog}
+          onSubmit={handleUpdateGearItem}
+          onSetEditTitle={setEditTitle}
+          onSetEditDescription={setEditDescription}
+          onSetEditCategory={setEditCategory}
+          onSetEditImageUrlInput={setEditImageUrlInput}
+          onSetEditPreviewUrl={setEditPreviewUrl}
+          onSetEditImageFit={setEditImageFit}
+          onAddEditImageUrl={handleAddEditImageUrl}
+          onToggleEditImageUrl={handleToggleEditImageUrl}
+          onFetchEditImageCandidates={handleFetchEditImageCandidates}
+          onRemoveEditImage={handleRemoveEditImage}
+          onPromoteEditImage={handlePromoteEditImage}
+          onEditImageDragStart={handleEditImageDragStart}
+          onEditImageDragOver={handleEditImageDragOver}
+          onEditImageDrop={handleEditImageDrop}
+          onEditImageDragEnd={handleEditImageDragEnd}
+          onPreviewImageLoad={handlePreviewImageLoad}
+          getImageSizeLabel={getImageSizeLabel}
+        />
       ) : null}
 
       {deleteConfirmTarget ? (
-        <div className="auth-dialog-backdrop" role="presentation" onClick={handleCloseDeleteDialog}>
-          <section
-            className="auth-dialog confirm-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-label="カード削除確認"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="auth-dialog-header">
-              <p className="auth-dialog-title">カードを削除</p>
-              <button
-                className="auth-dialog-close"
-                type="button"
-                onClick={handleCloseDeleteDialog}
-                disabled={deletingGearId === deleteConfirmTarget.id}
-                aria-label="閉じる"
-              >
-                <Cross2Icon />
-              </button>
-            </div>
-            <p className="confirm-dialog-message">「{deleteConfirmTarget.title}」を削除しますか？</p>
-            <div className="admin-form-actions">
-              <button
-                className="admin-button ghost"
-                type="button"
-                onClick={handleCloseDeleteDialog}
-                disabled={deletingGearId === deleteConfirmTarget.id}
-              >
-                キャンセル
-              </button>
-              <button
-                className="admin-button danger"
-                type="button"
-                onClick={() => {
-                  void handleConfirmDeleteGearItem()
-                }}
-                disabled={deletingGearId === deleteConfirmTarget.id}
-              >
-                {deletingGearId === deleteConfirmTarget.id ? '削除中...' : '削除する'}
-              </button>
-            </div>
-          </section>
-        </div>
+        <DeleteConfirmDialog
+          deleteConfirmTarget={deleteConfirmTarget}
+          isDeleting={deletingGearId === deleteConfirmTarget.id}
+          onConfirm={handleConfirmDeleteGearItem}
+          onClose={handleCloseDeleteDialog}
+        />
       ) : null}
 
       {isAdminEditing && renameCategoryTarget ? (
-        <div className="auth-dialog-backdrop" role="presentation" onClick={handleCloseRenameCategoryDialog}>
-          <section
-            className="auth-dialog category-rename-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-label="カテゴリ名を変更"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="auth-dialog-header">
-              <p className="auth-dialog-title">カテゴリ名を変更</p>
-              <button
-                className="auth-dialog-close"
-                type="button"
-                onClick={handleCloseRenameCategoryDialog}
-                disabled={isRenamingCategory}
-                aria-label="閉じる"
-              >
-                <Cross2Icon />
-              </button>
-            </div>
-            <form className="admin-form auth-form" onSubmit={handleSubmitRenameCategory}>
-              <label className="admin-label">
-                変更前
-                <input className="admin-input" type="text" value={renameCategoryTarget} readOnly />
-              </label>
-              <label className="admin-label">
-                変更後
-                <input
-                  className="admin-input"
-                  type="text"
-                  value={renameCategoryValue}
-                  onChange={(event) => setRenameCategoryValue(event.target.value)}
-                  placeholder="新しいカテゴリ名"
-                  required
-                />
-              </label>
-              <p className="add-dialog-note">同じカテゴリ名のカードすべてに反映されます。</p>
-              <div className="admin-form-actions">
-                <button
-                  className="admin-button ghost"
-                  type="button"
-                  onClick={handleCloseRenameCategoryDialog}
-                  disabled={isRenamingCategory}
-                >
-                  キャンセル
-                </button>
-                <button className="admin-button" type="submit" disabled={isRenamingCategory}>
-                  {isRenamingCategory ? '変更中...' : '変更する'}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
+        <RenameCategoryDialog
+          renameCategoryTarget={renameCategoryTarget}
+          renameCategoryValue={renameCategoryValue}
+          isRenamingCategory={isRenamingCategory}
+          onChange={setRenameCategoryValue}
+          onSubmit={handleSubmitRenameCategory}
+          onClose={handleCloseRenameCategoryDialog}
+        />
       ) : null}
 
-      {isAuthDialogOpen ? (
-        <div className="auth-dialog-backdrop" role="presentation" onClick={handleCloseAuthDialog}>
-          <section
-            className="auth-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-label="管理ログイン"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="auth-dialog-header">
-              <p className="auth-dialog-title">管理モード</p>
-              <button
-                className="auth-dialog-close"
-                type="button"
-                onClick={handleCloseAuthDialog}
-                disabled={isAuthBusy}
-                aria-label="閉じる"
-              >
-                <Cross2Icon />
-              </button>
-            </div>
-
-            {accessToken && adminEmail ? (
-              <div className="admin-signed-in">
-                <p className="admin-state">ログイン中: {adminEmail}</p>
-                <button className="admin-button ghost" type="button" onClick={handleLogout} disabled={isAuthBusy}>
-                  ログアウト
-                </button>
-              </div>
-            ) : (
-              <div className="admin-form auth-form">
-                <p className="auth-step-note">GitHubアカウントで管理モードにログインします。</p>
-                <button className="admin-button" type="button" onClick={handleStartGitHubAuth} disabled={isAuthBusy}>
-                  {isAuthBusy ? '移動中...' : 'GitHubでログイン'}
-                </button>
-              </div>
-            )}
-
-            {authMessage ? <p className="admin-message">{authMessage}</p> : null}
-          </section>
-        </div>
-      ) : null}
+      <AuthDialog
+        isOpen={isAuthDialogOpen}
+        accessToken={accessToken}
+        adminEmail={adminEmail}
+        authMessage={authMessage}
+        isAuthBusy={isAuthBusy}
+        onStartGitHubAuth={handleStartGitHubAuth}
+        onLogout={handleLogout}
+        onClose={handleCloseAuthDialog}
+      />
 
       {toast ? (
         <div className={`app-toast is-${toast.tone}`} role="status" aria-live="polite">
@@ -2433,7 +1587,7 @@ function App() {
         </span>
       </button>
 
-      <footer className="copyright">Copyright © {new Date().getFullYear()} ichi0g0y</footer>
+      <footer className="copyright">Copyright &copy; {new Date().getFullYear()} ichi0g0y</footer>
     </main>
   )
 }
