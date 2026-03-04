@@ -120,7 +120,7 @@ function parseStoredImageUrls(imageUrlsJson: string | null, fallbackImageUrl: st
         }
       }
     } catch {
-      // ignore broken JSON and fallback to image_url
+      // 壊れたJSONは無視し image_url にフォールバックする
     }
   }
 

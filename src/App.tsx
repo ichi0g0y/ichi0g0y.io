@@ -647,7 +647,7 @@ function App() {
           sortGearItems(
             previous.map((entry) =>
               entry.category === oldCategory
-                ? { ...entry, category: newCategory, categoryEn: renamedCategoryEn }
+                ? { ...entry, category: newCategory, ...(renamedCategoryEn != null ? { categoryEn: renamedCategoryEn } : {}) }
                 : entry,
             ),
           ),

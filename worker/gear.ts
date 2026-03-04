@@ -390,6 +390,9 @@ export async function handleRenameGearCategory(request: Request, env: Env) {
   const newCategoryEn = hasNewCategoryEn ? body.newCategoryEn.trim() || null : null
 
   if (targetCategory) {
+    if (!hasNewCategoryEn) {
+      return errorResponse('英語カテゴリ名を入力してください', 400)
+    }
     const now = nowSeconds()
     const result = await env.DB
       .prepare('UPDATE gear_items SET category_en = ?1, updated_at = ?2 WHERE category = ?3')

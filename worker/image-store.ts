@@ -211,10 +211,14 @@ async function backupExternalImage(env: Env, sourceUrl: string, requestUrl: URL)
     .bind(sourceUrlHash)
     .first<ImageRecord>()
 
+  if (existing) {
+    return buildManagedImageUrl(env, existing.id, requestUrl)
+  }
+
   const fetched = await fetchImageFromSource(sourceUrl)
   const contentHash = await sha256HexFromBytes(fetched.bytes)
-  const imageId = existing?.id ?? createNanoId()
-  const r2Key = existing?.r2_key ?? imageId
+  const imageId = createNanoId()
+  const r2Key = imageId
 
   await env.IMAGE_BUCKET.put(r2Key, fetched.bytes, {
     httpMetadata: {
@@ -228,46 +232,28 @@ async function backupExternalImage(env: Env, sourceUrl: string, requestUrl: URL)
     },
   })
 
-  if (existing) {
-    await env.DB.prepare(
-      `
-        UPDATE images
-        SET source_url = ?1,
-            content_sha256 = ?2,
-            content_type = ?3,
-            byte_size = ?4,
-            etag = ?5,
-            updated_at = ?6,
-            last_checked_at = ?7
-        WHERE id = ?8
-      `,
-    )
-      .bind(sourceUrl, contentHash, fetched.contentType, fetched.bytes.byteLength, fetched.etag, now, now, imageId)
-      .run()
-  } else {
-    await env.DB.prepare(
-      `
-        INSERT INTO images (
-          id,
-          r2_key,
-          source_url,
-          source_url_sha256,
-          content_sha256,
-          content_type,
-          byte_size,
-          width,
-          height,
-          etag,
-          created_at,
-          updated_at,
-          last_checked_at
-        )
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, ?8, ?9, ?10, ?11)
-      `,
-    )
-      .bind(imageId, r2Key, sourceUrl, sourceUrlHash, contentHash, fetched.contentType, fetched.bytes.byteLength, fetched.etag, now, now, now)
-      .run()
-  }
+  await env.DB.prepare(
+    `
+      INSERT INTO images (
+        id,
+        r2_key,
+        source_url,
+        source_url_sha256,
+        content_sha256,
+        content_type,
+        byte_size,
+        width,
+        height,
+        etag,
+        created_at,
+        updated_at,
+        last_checked_at
+      )
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, ?8, ?9, ?10, ?11)
+    `,
+  )
+    .bind(imageId, r2Key, sourceUrl, sourceUrlHash, contentHash, fetched.contentType, fetched.bytes.byteLength, fetched.etag, now, now, now)
+    .run()
 
   return buildManagedImageUrl(env, imageId, requestUrl)
 }
@@ -347,6 +333,10 @@ export async function handleGetImageById(request: Request, env: Env) {
 
   const object = await env.IMAGE_BUCKET.get(row.r2_key)
   if (!object || !object.body) {
+    // 本番環境では自己修復をスキップし、R2欠落時は404を返す
+    if (env.R2_PUBLIC_BASE_URL) {
+      return new Response('Not Found', { status: 404 })
+    }
     try {
       // ローカル開発時にR2オブジェクトが欠けても source_url から自己修復する。
       const fetched = await fetchImageFromSource(row.source_url)

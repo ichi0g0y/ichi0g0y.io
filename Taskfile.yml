@@ -85,24 +85,6 @@ tasks:
     cmds:
       - bun run images:backfill:r2:remote
 
-  images:backfill:r2:local:
-    desc: 既存画像をローカルR2へバックフィル
-    aliases:
-      - images-backfill-r2-local
-    deps:
-      - install
-    cmds:
-      - bun run images:backfill:r2:local
-
-  images:backfill:r2:remote:
-    desc: 既存画像をリモートR2へバックフィル
-    aliases:
-      - images-backfill-r2-remote
-    deps:
-      - install
-    cmds:
-      - bun run images:backfill:r2:remote
-
   d1:sync:local-to-remote:
     desc: ローカルD1の gear_items をリモートへ反映（データのみ）
     aliases:
