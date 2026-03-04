@@ -1,6 +1,7 @@
 export interface Env {
   ASSETS: Fetcher
   DB: D1Database
+  IMAGE_BUCKET: R2Bucket
   ACCESS_TOKEN_SECRET: string
   GITHUB_CLIENT_ID: string
   GITHUB_CLIENT_SECRET: string
@@ -8,6 +9,7 @@ export interface Env {
   OPENAI_API_KEY?: string
   OPENAI_MODEL?: string
   APP_ORIGIN?: string
+  R2_PUBLIC_BASE_URL?: string
 }
 
 export interface AccessTokenPayload {

@@ -6,6 +6,7 @@ import { fetchLinkPreview, resolveRequestedImageUrls, normalizeImageUrls } from 
 import type { LinkPreview } from './gear-preview'
 import { mapGearRow, normalizeImageFit, parseStoredImageUrls } from './gear-map'
 import type { GearRow } from './gear-map'
+import { backupImageUrls } from './image-store'
 
 export async function handleListGearItems(env: Env) {
   await ensureGearItemsSchema(env)
@@ -218,7 +219,8 @@ export async function handleCreateGearFromUrl(request: Request, env: Env) {
   const description = requestedDescription || preview.description
   const canTranslate = Boolean(env.OPENAI_API_KEY?.trim())
   const previewImageUrls = normalizeImageUrls(preview.imageCandidates.length > 0 ? preview.imageCandidates : [preview.imageUrl ?? ''])
-  const imageUrls = requestedImages.imageUrls ?? previewImageUrls
+  let imageUrls = requestedImages.imageUrls ?? previewImageUrls
+  imageUrls = await backupImageUrls(env, request, imageUrls)
   const imageUrl = imageUrls[0] ?? null
   const imageFit = requestedImageFit ?? 'contain'
 
@@ -325,7 +327,9 @@ export async function handleUpdateGearItem(request: Request, env: Env) {
   if (!resolvedImageUrls.ok) {
     return errorResponse(resolvedImageUrls.error, 400)
   }
-  const nextImageUrls = resolvedImageUrls.imageUrls ?? parseStoredImageUrls(existing.image_urls, existing.image_url)
+  const nextImageUrlsRaw = resolvedImageUrls.imageUrls ?? parseStoredImageUrls(existing.image_urls, existing.image_url)
+  const shouldBackupImages = body?.imageUrls !== undefined || body?.imageUrl !== undefined
+  const nextImageUrls = shouldBackupImages ? await backupImageUrls(env, request, nextImageUrlsRaw) : nextImageUrlsRaw
   const nextImageUrl = nextImageUrls[0] ?? null
   const nextImageFit = body?.imageFit === undefined ? existing.image_fit : normalizeImageFit(body.imageFit)
   const canTranslate = Boolean(env.OPENAI_API_KEY?.trim()) && (hasTitle || hasCategory || hasDescription)

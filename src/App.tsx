@@ -1468,23 +1468,6 @@ function App() {
 
         <div className="top-control-select">
           <span className="top-control-select-icon" aria-hidden="true">
-            <GlobeIcon />
-          </span>
-          <select
-            id="language-preference-select"
-            className="top-control-select-input"
-            aria-label={labels.languageAria}
-            value={languagePreference}
-            onChange={(event) => setLanguagePreference(event.target.value as AppLocalePreference)}
-          >
-            <option value="system">{languageSystemLabel}</option>
-            <option value="ja">日本語</option>
-            <option value="en">English</option>
-          </select>
-        </div>
-
-        <div className="top-control-select">
-          <span className="top-control-select-icon" aria-hidden="true">
             {themePreference === 'system'
               ? activeTheme === 'dark'
                 ? <MoonIcon />
@@ -1503,6 +1486,23 @@ function App() {
             <option value="system">{themeSystemLabel}</option>
             <option value="light">{themeLightLabel}</option>
             <option value="dark">{themeDarkLabel}</option>
+          </select>
+        </div>
+
+        <div className="top-control-select">
+          <span className="top-control-select-icon" aria-hidden="true">
+            <GlobeIcon />
+          </span>
+          <select
+            id="language-preference-select"
+            className="top-control-select-input"
+            aria-label={labels.languageAria}
+            value={languagePreference}
+            onChange={(event) => setLanguagePreference(event.target.value as AppLocalePreference)}
+          >
+            <option value="system">{languageSystemLabel}</option>
+            <option value="ja">日本語</option>
+            <option value="en">English</option>
           </select>
         </div>
       </div>

@@ -13,6 +13,12 @@ GitHub OAuth App を作成し、Authorization callback URL に `http://localhost
 
 翻訳を有効にする場合は `.dev.vars` に `OPENAI_API_KEY`（必要に応じて `OPENAI_MODEL`）を設定してください。
 
+R2を使う場合は、事前にバケットを作成してください。
+
+```bash
+wrangler r2 bucket create ichi0g0y-io
+```
+
 ## 開発サーバー
 
 ```bash
@@ -33,10 +39,19 @@ Workers API のみ起動したい場合:
 task worker-dev
 ```
 
+`worker-dev` は `wrangler dev --env dev --local` で起動します。
+ローカル開発中は画像URLを `/api/images/:id` で扱い、リモート環境では `R2_PUBLIC_BASE_URL`（prod: `https://s3.ichi0g0y.io`）を使います。
+
 初回はD1マイグレーションをローカル適用してください。
 
 ```bash
 task d1-migrate-local
+```
+
+既存の `gear_items` 画像URLをR2へ一括バックフィルする場合:
+
+```bash
+task images-backfill-r2-remote
 ```
 
 ## 環境データの保存/復元
@@ -81,3 +96,4 @@ bun run build
 - 1ページ完結のSPA
 - 隠し管理モード（GitHub OAuth + access/refresh token）
 - URLからOG情報を取得して機材カードを追加
+- 管理画面で登録/更新した画像URLはR2へバックアップし、リモートでは `s3*.ichi0g0y.io/<id>` の公開URLで配信

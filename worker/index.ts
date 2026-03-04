@@ -9,6 +9,7 @@ import {
   handleTranslateGearDescription,
   handleUpdateGearItem,
 } from './gear'
+import { handleGetImageById } from './image-store'
 import type { Env } from './types'
 import { appendCorsHeaders, errorResponse, preflightResponse } from './utils'
 
@@ -43,6 +44,14 @@ async function routeApi(request: Request, env: Env) {
 
   if (method === 'GET' && pathname === '/api/preview') {
     return handlePreview(request)
+  }
+
+  if ((method === 'GET' || method === 'HEAD') && pathname.startsWith('/api/images/')) {
+    const response = await handleGetImageById(request, env)
+    if (method === 'HEAD') {
+      return new Response(null, { status: response.status, headers: response.headers })
+    }
+    return response
   }
 
   if (method === 'GET' && pathname === '/api/gear-items') {
