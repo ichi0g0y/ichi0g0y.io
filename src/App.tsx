@@ -1,4 +1,4 @@
-import { Cross2Icon, EyeOpenIcon, GlobeIcon, MixIcon, MoonIcon, Pencil2Icon, PlusIcon, SunIcon } from '@radix-ui/react-icons'
+import { ChevronUpIcon, Cross2Icon, EyeOpenIcon, GlobeIcon, MoonIcon, Pencil2Icon, PlusIcon, SunIcon } from '@radix-ui/react-icons'
 import {
   useCallback,
   useEffect,
@@ -36,6 +36,7 @@ import { createIntroMessage, getAuthErrorMessage, normalizeGearItem, normalizeIm
 type AppLocalePreference = AppLocale | 'system'
 type AppTheme = 'light' | 'dark'
 type AppThemePreference = AppTheme | 'system'
+const GEAR_PAGE_SIZE = 12
 
 function detectSystemLocale(): AppLocale {
   if (typeof window === 'undefined') {
@@ -80,12 +81,31 @@ function App() {
   const introChars = useMemo(() => Array.from(createIntroMessage(activeLanguage)), [activeLanguage])
   const twitchChannelUrl = `https://www.twitch.tv/${TWITCH_CHANNEL}`
   const twitchEmbedSrc = useMemo(() => {
-    const parent = window.location.hostname || 'localhost'
-    return `https://player.twitch.tv/?channel=${TWITCH_CHANNEL}&parent=${parent}&muted=true`
+    const parents = new Set<string>(['ichi0g0y.io', 'www.ichi0g0y.io'])
+    const currentHost = window.location.hostname?.trim().toLowerCase()
+    const isLocalHost = currentHost === 'localhost' || currentHost === '127.0.0.1'
+
+    if (currentHost) {
+      parents.add(currentHost)
+    }
+    if (isLocalHost) {
+      parents.add('localhost')
+    }
+
+    const embedUrl = new URL('https://player.twitch.tv/')
+    embedUrl.searchParams.set('channel', TWITCH_CHANNEL)
+    embedUrl.searchParams.set('muted', 'true')
+    for (const parent of parents) {
+      if (!parent) {
+        continue
+      }
+      embedUrl.searchParams.append('parent', parent)
+    }
+    return embedUrl.toString()
   }, [])
   const typedChars = useTypewriter(introChars)
   const { toast, setToast, showToast } = useToast()
-  const [gearItems, setGearItems] = useState<GearItem[]>(fallbackGearItems)
+  const [gearItems, setGearItems] = useState<GearItem[]>([])
   const [isGearLoading, setIsGearLoading] = useState(true)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [adminEmail, setAdminEmail] = useState<string | null>(null)
@@ -113,9 +133,12 @@ function App() {
   const [isReordering, setIsReordering] = useState(false)
   const [editingGearId, setEditingGearId] = useState<number | null>(null)
   const [editTitle, setEditTitle] = useState('')
+  const [editTitleEn, setEditTitleEn] = useState('')
+  const [editOriginalTitleEn, setEditOriginalTitleEn] = useState('')
   const [editDescription, setEditDescription] = useState('')
+  const [editDescriptionEn, setEditDescriptionEn] = useState('')
+  const [editOriginalDescriptionEn, setEditOriginalDescriptionEn] = useState('')
   const [editCategory, setEditCategory] = useState('')
-  const [editOriginalCategory, setEditOriginalCategory] = useState('')
   const [editImageUrls, setEditImageUrls] = useState<string[]>([])
   const [editImageUrlInput, setEditImageUrlInput] = useState('')
   const [editDraggingImageIndex, setEditDraggingImageIndex] = useState<number | null>(null)
@@ -124,14 +147,20 @@ function App() {
   const [editImageCandidates, setEditImageCandidates] = useState<string[]>([])
   const [editImageFit, setEditImageFit] = useState<GearItem['imageFit']>('contain')
   const [isFetchingEditPreview, setIsFetchingEditPreview] = useState(false)
+  const [isTranslatingEditDescriptionEn, setIsTranslatingEditDescriptionEn] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState('all')
+  const [visibleGearCount, setVisibleGearCount] = useState(GEAR_PAGE_SIZE)
+  const [showBackToPicks, setShowBackToPicks] = useState(false)
   const [gearImageIndexes, setGearImageIndexes] = useState<Record<number, number>>({})
   const [renameCategoryTarget, setRenameCategoryTarget] = useState<string | null>(null)
   const [renameCategoryValue, setRenameCategoryValue] = useState('')
+  const [renameCategoryValueEn, setRenameCategoryValueEn] = useState('')
   const [isRenamingCategory, setIsRenamingCategory] = useState(false)
   const [imageSizesByUrl, setImageSizesByUrl] = useState<Record<string, ImageSize>>({})
   const addDialogUrlInputRef = useRef<HTMLInputElement | null>(null)
+  const gearCategoryRowRef = useRef<HTMLDivElement | null>(null)
+  const gearLoadMoreRef = useRef<HTMLDivElement | null>(null)
   const tapStateRef = useRef({ count: 0, lastTappedAt: 0 })
   const isAdminEditing = Boolean(accessToken && isEditMode)
   const isModeToggleLocked = isAdding || isFetchingPreview || isUpdating || deletingGearId !== null || isRenamingCategory
@@ -148,6 +177,26 @@ function App() {
   const categoryOptions = useMemo(() => {
     return Array.from(new Set(gearItems.map((item) => item.category.trim()).filter((category) => category.length > 0)))
   }, [gearItems])
+  const categoryEnByCategory = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of gearItems) {
+      const jaCategory = item.category.trim()
+      const enCategory = item.categoryEn?.trim() ?? ''
+      if (!jaCategory || !enCategory || map.has(jaCategory)) {
+        continue
+      }
+      map.set(jaCategory, enCategory)
+    }
+    return map
+  }, [gearItems])
+  const editCategoryDisplayOptions = useMemo(
+    () =>
+      categoryOptions.map((category) => ({
+        value: category,
+        label: activeLanguage === 'en' ? categoryEnByCategory.get(category) ?? category : category,
+      })),
+    [activeLanguage, categoryEnByCategory, categoryOptions],
+  )
 
   const categoryDisplayMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -168,6 +217,11 @@ function App() {
     }
     return gearItems.filter((item) => item.category === selectedCategory)
   }, [gearItems, selectedCategory])
+  const visibleFilteredGearItems = useMemo(
+    () => filteredGearItems.slice(0, visibleGearCount),
+    [filteredGearItems, visibleGearCount],
+  )
+  const hasMoreFilteredGearItems = visibleGearCount < filteredGearItems.length
   const newGearImageUrlSet = useMemo(() => new Set(newGearImageUrls), [newGearImageUrls])
   const editImageUrlSet = useMemo(() => new Set(editImageUrls), [editImageUrls])
 
@@ -286,9 +340,7 @@ function App() {
       const response = await fetch('/api/gear-items')
       const data = await parseApiResponse(response)
       const items = Array.isArray(data.items) ? (data.items as GearItem[]) : []
-      if (items.length > 0) {
-        setGearItems(sortGearItems(items.map(normalizeGearItem)))
-      }
+      setGearItems(sortGearItems(items.map(normalizeGearItem)))
     } catch {
       setGearItems(sortGearItems(fallbackGearItems))
     } finally {
@@ -321,6 +373,52 @@ function App() {
       setSelectedCategory('all')
     }
   }, [categoryOptions, selectedCategory])
+
+  useEffect(() => {
+    setVisibleGearCount(GEAR_PAGE_SIZE)
+  }, [selectedCategory, gearItems.length])
+
+  useEffect(() => {
+    const node = gearLoadMoreRef.current
+    if (!node || isGearLoading || !hasMoreFilteredGearItems) {
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (!entry?.isIntersecting) {
+          return
+        }
+        setVisibleGearCount((previous) => Math.min(previous + GEAR_PAGE_SIZE, filteredGearItems.length))
+      },
+      { root: null, rootMargin: '240px 0px', threshold: 0.01 },
+    )
+    observer.observe(node)
+    return () => {
+      observer.disconnect()
+    }
+  }, [filteredGearItems.length, hasMoreFilteredGearItems, isGearLoading])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    const handleScroll = () => {
+      const categoryRow = gearCategoryRowRef.current
+      if (!categoryRow) {
+        setShowBackToPicks(window.scrollY > 420)
+        return
+      }
+      const categoryRowOffsetTop = categoryRow.getBoundingClientRect().top + window.scrollY
+      setShowBackToPicks(window.scrollY > categoryRowOffsetTop + 280)
+    }
+    handleScroll()
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
 
   useEffect(() => {
     if (!isAddFormOpen || addDialogStep !== 'url') {
@@ -424,9 +522,12 @@ function App() {
       setEditingGearId(null)
       setDeleteConfirmTarget(null)
       setEditTitle('')
+      setEditTitleEn('')
+      setEditOriginalTitleEn('')
       setEditDescription('')
+      setEditDescriptionEn('')
+      setEditOriginalDescriptionEn('')
       setEditCategory('')
-      setEditOriginalCategory('')
       setEditImageUrls([])
       setEditImageUrlInput('')
       setEditDraggingImageIndex(null)
@@ -434,9 +535,11 @@ function App() {
       setEditPreviewUrl('')
       setEditImageCandidates([])
       setIsFetchingEditPreview(false)
+      setIsTranslatingEditDescriptionEn(false)
       setEditImageFit('contain')
       setRenameCategoryTarget(null)
       setRenameCategoryValue('')
+      setRenameCategoryValueEn('')
       setIsRenamingCategory(false)
       setSelectedCategory('all')
       setAuthMessage('ログアウトしました。')
@@ -449,9 +552,12 @@ function App() {
   const openEditGearItem = useCallback((item: GearItem) => {
     setEditingGearId(item.id)
     setEditTitle(item.title)
+    setEditTitleEn(item.titleEn ?? '')
+    setEditOriginalTitleEn(item.titleEn ?? '')
     setEditDescription(item.description ?? '')
+    setEditDescriptionEn(item.descriptionEn ?? '')
+    setEditOriginalDescriptionEn(item.descriptionEn ?? '')
     setEditCategory(item.category)
-    setEditOriginalCategory(item.category)
     setEditImageUrls(normalizeImageUrls(item.imageUrls, item.imageUrl))
     setEditImageUrlInput('')
     setEditDraggingImageIndex(null)
@@ -459,6 +565,7 @@ function App() {
     setEditPreviewUrl(item.linkUrl ?? '')
     setEditImageCandidates([])
     setIsFetchingEditPreview(false)
+    setIsTranslatingEditDescriptionEn(false)
     setEditImageFit(item.imageFit)
     setIsAddFormOpen(false)
   }, [])
@@ -490,7 +597,8 @@ function App() {
     event.stopPropagation()
     setRenameCategoryTarget(category)
     setRenameCategoryValue(category)
-  }, [])
+    setRenameCategoryValueEn(categoryEnByCategory.get(category) ?? '')
+  }, [categoryEnByCategory])
 
   const handleCloseRenameCategoryDialog = useCallback(() => {
     if (isRenamingCategory) {
@@ -498,6 +606,7 @@ function App() {
     }
     setRenameCategoryTarget(null)
     setRenameCategoryValue('')
+    setRenameCategoryValueEn('')
   }, [isRenamingCategory])
 
   const handleSubmitRenameCategory = useCallback(
@@ -509,12 +618,13 @@ function App() {
 
       const oldCategory = renameCategoryTarget.trim()
       const newCategory = renameCategoryValue.trim()
+      const newCategoryEn = renameCategoryValueEn.trim()
       if (!newCategory) {
         showToast('変更後カテゴリ名を入力してください', 'error')
         return
       }
 
-      if (oldCategory === newCategory) {
+      if (oldCategory === newCategory && (categoryEnByCategory.get(oldCategory) ?? '') === newCategoryEn) {
         handleCloseRenameCategoryDialog()
         return
       }
@@ -524,15 +634,20 @@ function App() {
         const data = await requestWithAuth('/api/admin/gear-categories/rename', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ oldCategory, newCategory }),
+          body: JSON.stringify({ oldCategory, newCategory, newCategoryEn }),
         })
         const updatedCount = typeof data.updatedCount === 'number' ? data.updatedCount : null
-        const newCategoryEn = typeof data.newCategoryEn === 'string' ? data.newCategoryEn : null
+        const renamedCategoryEn =
+          typeof data.newCategoryEn === 'string'
+            ? data.newCategoryEn
+            : data.newCategoryEn === null
+              ? null
+              : newCategoryEn || null
         setGearItems((previous) =>
           sortGearItems(
             previous.map((entry) =>
               entry.category === oldCategory
-                ? { ...entry, category: newCategory, ...(newCategoryEn != null ? { categoryEn: newCategoryEn } : {}) }
+                ? { ...entry, category: newCategory, ...(renamedCategoryEn != null ? { categoryEn: renamedCategoryEn } : {}) }
                 : entry,
             ),
           ),
@@ -540,6 +655,7 @@ function App() {
         setSelectedCategory((previous) => (previous === oldCategory ? newCategory : previous))
         setRenameCategoryTarget(null)
         setRenameCategoryValue('')
+        setRenameCategoryValueEn('')
         showToast(updatedCount === 0 ? '対象カテゴリは見つかりませんでした。' : 'カテゴリ名を変更しました。', 'success')
       } catch (error) {
         const message = error instanceof Error ? error.message : 'カテゴリ名の変更に失敗しました'
@@ -548,7 +664,16 @@ function App() {
         setIsRenamingCategory(false)
       }
     },
-    [handleCloseRenameCategoryDialog, renameCategoryTarget, renameCategoryValue, requestWithAuth, showToast, sortGearItems],
+    [
+      categoryEnByCategory,
+      handleCloseRenameCategoryDialog,
+      renameCategoryTarget,
+      renameCategoryValue,
+      renameCategoryValueEn,
+      requestWithAuth,
+      showToast,
+      sortGearItems,
+    ],
   )
 
   const handleLoadPreviewForAddDialog = useCallback(
@@ -698,9 +823,12 @@ function App() {
       if (editingGearId === target.id) {
         setEditingGearId(null)
         setEditTitle('')
+        setEditTitleEn('')
+        setEditOriginalTitleEn('')
         setEditDescription('')
+        setEditDescriptionEn('')
+        setEditOriginalDescriptionEn('')
         setEditCategory('')
-        setEditOriginalCategory('')
         setEditImageUrls([])
         setEditImageUrlInput('')
         setEditDraggingImageIndex(null)
@@ -708,6 +836,7 @@ function App() {
         setEditPreviewUrl('')
         setEditImageCandidates([])
         setIsFetchingEditPreview(false)
+        setIsTranslatingEditDescriptionEn(false)
         setEditImageFit('contain')
       }
       setDeleteConfirmTarget(null)
@@ -935,9 +1064,12 @@ function App() {
   const handleCancelEdit = useCallback(() => {
     setEditingGearId(null)
     setEditTitle('')
+    setEditTitleEn('')
+    setEditOriginalTitleEn('')
     setEditDescription('')
+    setEditDescriptionEn('')
+    setEditOriginalDescriptionEn('')
     setEditCategory('')
-    setEditOriginalCategory('')
     setEditImageUrls([])
     setEditImageUrlInput('')
     setEditDraggingImageIndex(null)
@@ -945,6 +1077,7 @@ function App() {
     setEditPreviewUrl('')
     setEditImageCandidates([])
     setIsFetchingEditPreview(false)
+    setIsTranslatingEditDescriptionEn(false)
     setEditImageFit('contain')
   }, [])
 
@@ -959,9 +1092,12 @@ function App() {
     setDeleteConfirmTarget(null)
     setEditingGearId(null)
     setEditTitle('')
+    setEditTitleEn('')
+    setEditOriginalTitleEn('')
     setEditDescription('')
+    setEditDescriptionEn('')
+    setEditOriginalDescriptionEn('')
     setEditCategory('')
-    setEditOriginalCategory('')
     setEditImageUrls([])
     setEditImageUrlInput('')
     setEditDraggingImageIndex(null)
@@ -969,9 +1105,11 @@ function App() {
     setEditPreviewUrl('')
     setEditImageCandidates([])
     setIsFetchingEditPreview(false)
+    setIsTranslatingEditDescriptionEn(false)
     setEditImageFit('contain')
     setRenameCategoryTarget(null)
     setRenameCategoryValue('')
+    setRenameCategoryValueEn('')
     setIsRenamingCategory(false)
     setDraggingGearId(null)
     setDragOverGearId(null)
@@ -998,64 +1136,69 @@ function App() {
         showToast('タイトルを入力してください', 'error')
         return
       }
-
+      const nextTitleEn = editTitleEn.trim()
+      const oldTitleEn = editOriginalTitleEn.trim()
       const nextCategory = editCategory.trim()
-      const oldCategory = editOriginalCategory.trim()
-      const shouldRenameCategoryGlobally =
-        oldCategory.length > 0 && nextCategory.length > 0 && oldCategory !== nextCategory
+      if (!nextCategory) {
+        showToast('カテゴリを入力してください', 'error')
+        return
+      }
+      const nextDescriptionEn = editDescriptionEn.trim()
+      const oldDescriptionEn = editOriginalDescriptionEn.trim()
+      const shouldUpdateTitleEn = nextTitleEn !== oldTitleEn
+      const shouldUpdateDescriptionEn = nextDescriptionEn !== oldDescriptionEn
       const nextImageUrls = editImageUrls
+      const selectedCategoryEn = categoryEnByCategory.get(nextCategory) ?? ''
 
       setIsUpdating(true)
 
       try {
-        let renameNewCategoryEn: string | null = null
-        if (shouldRenameCategoryGlobally) {
-          const renameData = await requestWithAuth('/api/admin/gear-categories/rename', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              oldCategory,
-              newCategory: nextCategory,
-            }),
-          })
-          renameNewCategoryEn = typeof renameData.newCategoryEn === 'string' ? renameData.newCategoryEn : null
+        const updatePayload: {
+          title: string
+          description: string
+          category: string
+          imageUrls: string[]
+          imageFit: GearItem['imageFit']
+          categoryEn: string
+          titleEn?: string
+          descriptionEn?: string
+        } = {
+          title: nextTitle,
+          description: editDescription,
+          category: nextCategory,
+          imageUrls: nextImageUrls,
+          imageFit: editImageFit,
+          categoryEn: selectedCategoryEn,
+        }
+        if (shouldUpdateTitleEn) {
+          updatePayload.titleEn = nextTitleEn
+        }
+        if (shouldUpdateDescriptionEn) {
+          updatePayload.descriptionEn = nextDescriptionEn
         }
 
         const data = await requestWithAuth(`/api/admin/gear-items/${editingGearId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: nextTitle,
-            description: editDescription,
-            category: nextCategory,
-            imageUrls: nextImageUrls,
-            imageFit: editImageFit,
-          }),
+          body: JSON.stringify(updatePayload),
         })
         const updatedItem = (data.item as GearItem | undefined) ?? null
         if (!updatedItem) {
           throw new Error('カード更新に失敗しました')
         }
-        setGearItems((previous) => {
-          const renamedItems = shouldRenameCategoryGlobally
-            ? previous.map((entry) =>
-                entry.category === oldCategory
-                  ? { ...entry, category: nextCategory, ...(renameNewCategoryEn != null ? { categoryEn: renameNewCategoryEn } : {}) }
-                  : entry,
-              )
-            : previous
-
-          return sortGearItems(
-            renamedItems.map((entry) =>
-              entry.id === updatedItem.id ? normalizeGearItem({ ...entry, ...updatedItem }) : entry,
-            ),
-          )
-        })
+        setGearItems((previous) =>
+          sortGearItems(
+            previous.map((entry) => (entry.id === updatedItem.id ? normalizeGearItem({ ...entry, ...updatedItem }) : entry)),
+          ),
+        )
         setEditingGearId(null)
         setEditTitle('')
+        setEditTitleEn('')
+        setEditOriginalTitleEn('')
         setEditDescription('')
+        setEditDescriptionEn('')
+        setEditOriginalDescriptionEn('')
         setEditCategory('')
-        setEditOriginalCategory('')
         setEditImageUrls([])
         setEditImageUrlInput('')
         setEditDraggingImageIndex(null)
@@ -1063,8 +1206,9 @@ function App() {
         setEditPreviewUrl('')
         setEditImageCandidates([])
         setIsFetchingEditPreview(false)
+        setIsTranslatingEditDescriptionEn(false)
         setEditImageFit('contain')
-        showToast(shouldRenameCategoryGlobally ? 'カードを更新し、カテゴリ名を一括変更しました。' : 'カードを更新しました。', 'success')
+        showToast('カードを更新しました。', 'success')
       } catch (error) {
         const message = error instanceof Error ? error.message : 'カード更新に失敗しました'
         showToast(message, 'error')
@@ -1075,16 +1219,52 @@ function App() {
     [
       editCategory,
       editDescription,
+      editDescriptionEn,
       editImageUrls,
       editImageFit,
-      editOriginalCategory,
+      editOriginalDescriptionEn,
+      editOriginalTitleEn,
       editTitle,
+      editTitleEn,
       editingGearId,
+      categoryEnByCategory,
       requestWithAuth,
       showToast,
       sortGearItems,
     ],
   )
+
+  const handleTranslateEditDescriptionEn = useCallback(async () => {
+    const sourceDescription = editDescription.trim()
+    if (!sourceDescription) {
+      showToast('日本語説明を入力してください', 'error')
+      return
+    }
+
+    setIsTranslatingEditDescriptionEn(true)
+    try {
+      const data = await requestWithAuth('/api/admin/gear-items/translate-description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: editTitle.trim(),
+          category: editCategory.trim(),
+          description: sourceDescription,
+        }),
+      })
+      const translatedDescription = typeof data.descriptionEn === 'string' ? data.descriptionEn.trim() : ''
+      if (!translatedDescription) {
+        throw new Error('英語説明の生成に失敗しました')
+      }
+      setEditDescriptionEn(translatedDescription)
+      showToast('英語説明を更新しました。', 'success')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '英語説明の生成に失敗しました'
+      showToast(message, 'error')
+    } finally {
+      setIsTranslatingEditDescriptionEn(false)
+    }
+  }, [editCategory, editDescription, editTitle, requestWithAuth, showToast])
 
   const handleAddEditImageUrl = useCallback(() => {
     const nextUrl = editImageUrlInput.trim()
@@ -1246,6 +1426,16 @@ function App() {
     setGearImageIndexes((previous) => ({ ...previous, [item.id]: nextIndex }))
   }, [])
 
+  const handleBackToPicks = useCallback(() => {
+    const categoryRow = gearCategoryRowRef.current
+    if (!categoryRow) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    const nextTop = categoryRow.getBoundingClientRect().top + window.scrollY - 16
+    window.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' })
+  }, [])
+
   const draggingGearCategory = useMemo(() => {
     if (draggingGearId === null) {
       return null
@@ -1255,25 +1445,10 @@ function App() {
 
   const canReorderCategories = Boolean(isAdminEditing && !isReordering)
   const canReorderCards = Boolean(isAdminEditing && !isReordering)
-  const nextLanguagePreference: AppLocalePreference =
-    languagePreference === 'system' ? 'ja' : languagePreference === 'ja' ? 'en' : 'system'
-  const nextThemePreference: AppThemePreference =
-    themePreference === 'system' ? 'light' : themePreference === 'light' ? 'dark' : 'system'
-  const isDarkTheme = activeTheme === 'dark'
-  const themePreferenceCode = themePreference === 'system' ? 'SYS' : themePreference === 'dark' ? 'D' : 'L'
-  const languagePreferenceCode = languagePreference === 'system' ? 'SYS' : languagePreference.toUpperCase()
-  const themeAriaLabel =
-    nextThemePreference === 'system'
-      ? labels.themeToSystemAria
-      : nextThemePreference === 'dark'
-        ? labels.themeToDarkAria
-        : labels.themeToLightAria
-  const languageAriaLabel =
-    nextLanguagePreference === 'system'
-      ? labels.languageToSystemAria
-      : nextLanguagePreference === 'en'
-        ? labels.languageToEnglishAria
-        : labels.languageToJapaneseAria
+  const languageSystemLabel = activeLanguage === 'ja' ? 'システム' : 'System'
+  const themeSystemLabel = activeLanguage === 'ja' ? 'システム' : 'System'
+  const themeLightLabel = activeLanguage === 'ja' ? 'ライト' : 'Light'
+  const themeDarkLabel = activeLanguage === 'ja' ? 'ダーク' : 'Dark'
 
   return (
     <main className="page">
@@ -1291,31 +1466,45 @@ function App() {
           </button>
         ) : null}
 
-        <button
-          className={`theme-toggle-button${isDarkTheme ? ' is-dark' : ''}`}
-          type="button"
-          aria-label={themeAriaLabel}
-          title={themeAriaLabel}
-          onClick={() => setThemePreference(nextThemePreference)}
-        >
-          {themePreference === 'system' ? <MixIcon /> : isDarkTheme ? <SunIcon /> : <MoonIcon />}
-          <span className="theme-toggle-code" aria-hidden="true">
-            {themePreferenceCode}
+        <div className="top-control-select">
+          <span className="top-control-select-icon" aria-hidden="true">
+            {themePreference === 'system'
+              ? activeTheme === 'dark'
+                ? <MoonIcon />
+                : <SunIcon />
+              : themePreference === 'dark'
+                ? <MoonIcon />
+                : <SunIcon />}
           </span>
-        </button>
+          <select
+            id="theme-preference-select"
+            className="top-control-select-input"
+            aria-label={labels.themeAria}
+            value={themePreference}
+            onChange={(event) => setThemePreference(event.target.value as AppThemePreference)}
+          >
+            <option value="system">{themeSystemLabel}</option>
+            <option value="light">{themeLightLabel}</option>
+            <option value="dark">{themeDarkLabel}</option>
+          </select>
+        </div>
 
-        <button
-          className="language-toggle-button"
-          type="button"
-          aria-label={languageAriaLabel}
-          title={languageAriaLabel}
-          onClick={() => setLanguagePreference(nextLanguagePreference)}
-        >
-          <GlobeIcon />
-          <span className="language-toggle-code" aria-hidden="true">
-            {languagePreferenceCode}
+        <div className="top-control-select">
+          <span className="top-control-select-icon" aria-hidden="true">
+            <GlobeIcon />
           </span>
-        </button>
+          <select
+            id="language-preference-select"
+            className="top-control-select-input"
+            aria-label={labels.languageAria}
+            value={languagePreference}
+            onChange={(event) => setLanguagePreference(event.target.value as AppLocalePreference)}
+          >
+            <option value="system">{languageSystemLabel}</option>
+            <option value="ja">日本語</option>
+            <option value="en">English</option>
+          </select>
+        </div>
       </div>
 
       <section className="title-area" aria-label="profile header">
@@ -1388,7 +1577,7 @@ function App() {
           ) : null}
         </div>
 
-        <div className="gear-filter-row">
+        <div ref={gearCategoryRowRef} className="gear-filter-row">
           <button
             type="button"
             className={`gear-filter-chip${selectedCategory === 'all' ? ' is-active' : ''}`}
@@ -1438,7 +1627,7 @@ function App() {
         {isGearLoading ? <p className="gear-loading">{labels.gearLoading}</p> : null}
 
         <ul className="gear-item-grid">
-          {filteredGearItems.map((item) => {
+          {visibleFilteredGearItems.map((item) => {
             const itemTitle = activeLanguage === 'en' && item.titleEn ? item.titleEn : item.title
             const itemCategory = activeLanguage === 'en' && item.categoryEn ? item.categoryEn : item.category
             const itemDescription = activeLanguage === 'en' && item.descriptionEn ? item.descriptionEn : item.description
@@ -1578,6 +1767,7 @@ function App() {
         {!isGearLoading && filteredGearItems.length < 1 ? (
           <p className="gear-loading">{labels.noItems}</p>
         ) : null}
+        {!isGearLoading && hasMoreFilteredGearItems ? <div ref={gearLoadMoreRef} className="gear-load-sentinel" aria-hidden="true" /> : null}
       </section>
 
       {isAdminEditing && isAddFormOpen ? (
@@ -1616,8 +1806,12 @@ function App() {
       {isAdminEditing && editingGearId ? (
         <EditGearDialog
           editTitle={editTitle}
+          editTitleEn={editTitleEn}
           editDescription={editDescription}
+          editDescriptionEn={editDescriptionEn}
           editCategory={editCategory}
+          editCategoryLabel={activeLanguage === 'en' ? categoryEnByCategory.get(editCategory) ?? editCategory : editCategory}
+          categoryDisplayOptions={editCategoryDisplayOptions}
           editImageUrls={editImageUrls}
           editImageUrlInput={editImageUrlInput}
           editImageCandidates={editImageCandidates}
@@ -1626,15 +1820,18 @@ function App() {
           editPreviewUrl={editPreviewUrl}
           editDraggingImageIndex={editDraggingImageIndex}
           editDragOverImageIndex={editDragOverImageIndex}
-          categoryOptions={categoryOptions}
           isUpdating={isUpdating}
           isFetchingEditPreview={isFetchingEditPreview}
           imageSizesByUrl={imageSizesByUrl}
           onClose={handleCloseEditDialog}
           onSubmit={handleUpdateGearItem}
           onSetEditTitle={setEditTitle}
+          onSetEditTitleEn={setEditTitleEn}
           onSetEditDescription={setEditDescription}
+          onSetEditDescriptionEn={setEditDescriptionEn}
           onSetEditCategory={setEditCategory}
+          isTranslatingEditDescriptionEn={isTranslatingEditDescriptionEn}
+          onTranslateEditDescriptionEn={handleTranslateEditDescriptionEn}
           onSetEditImageUrlInput={setEditImageUrlInput}
           onSetEditPreviewUrl={setEditPreviewUrl}
           onSetEditImageFit={setEditImageFit}
@@ -1663,10 +1860,11 @@ function App() {
 
       {isAdminEditing && renameCategoryTarget ? (
         <RenameCategoryDialog
-          renameCategoryTarget={renameCategoryTarget}
           renameCategoryValue={renameCategoryValue}
+          renameCategoryValueEn={renameCategoryValueEn}
           isRenamingCategory={isRenamingCategory}
           onChange={setRenameCategoryValue}
+          onChangeEn={setRenameCategoryValueEn}
           onSubmit={handleSubmitRenameCategory}
           onClose={handleCloseRenameCategoryDialog}
         />
@@ -1688,6 +1886,15 @@ function App() {
           {toast.message}
         </div>
       ) : null}
+
+      <button
+        type="button"
+        className={`back-to-picks${showBackToPicks ? ' is-visible' : ''}`}
+        onClick={handleBackToPicks}
+        aria-label={activeLanguage === 'en' ? 'Back to Picks categories' : 'Picksカテゴリに戻る'}
+      >
+        <ChevronUpIcon />
+      </button>
 
       <footer className="copyright">Copyright &copy; {new Date().getFullYear()} ichi0g0y</footer>
     </main>

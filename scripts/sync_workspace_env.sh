@@ -22,6 +22,8 @@ TARGET_FILES=(
   ".envrc"
   ".dev.vars"
   ".dev.vars.example"
+  ".prod.vars"
+  ".dev.vars.prod"
 )
 
 TARGET_DIRS=(
