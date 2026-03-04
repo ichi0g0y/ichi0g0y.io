@@ -1,4 +1,4 @@
-import { Cross2Icon, EyeOpenIcon, GlobeIcon, MixIcon, MoonIcon, Pencil2Icon, PlusIcon, SunIcon } from '@radix-ui/react-icons'
+import { Cross2Icon, EyeOpenIcon, GlobeIcon, MoonIcon, Pencil2Icon, PlusIcon, SunIcon } from '@radix-ui/react-icons'
 import {
   useCallback,
   useEffect,
@@ -1272,25 +1272,10 @@ function App() {
 
   const canReorderCategories = Boolean(isAdminEditing && !isReordering)
   const canReorderCards = Boolean(isAdminEditing && !isReordering)
-  const nextLanguagePreference: AppLocalePreference =
-    languagePreference === 'system' ? 'ja' : languagePreference === 'ja' ? 'en' : 'system'
-  const nextThemePreference: AppThemePreference =
-    themePreference === 'system' ? 'light' : themePreference === 'light' ? 'dark' : 'system'
-  const isDarkTheme = activeTheme === 'dark'
-  const themePreferenceCode = themePreference === 'system' ? 'SYS' : themePreference === 'dark' ? 'D' : 'L'
-  const languagePreferenceCode = languagePreference === 'system' ? 'SYS' : languagePreference.toUpperCase()
-  const themeAriaLabel =
-    nextThemePreference === 'system'
-      ? labels.themeToSystemAria
-      : nextThemePreference === 'dark'
-        ? labels.themeToDarkAria
-        : labels.themeToLightAria
-  const languageAriaLabel =
-    nextLanguagePreference === 'system'
-      ? labels.languageToSystemAria
-      : nextLanguagePreference === 'en'
-        ? labels.languageToEnglishAria
-        : labels.languageToJapaneseAria
+  const languageSystemLabel = activeLanguage === 'ja' ? 'システム' : 'System'
+  const themeSystemLabel = activeLanguage === 'ja' ? 'システム' : 'System'
+  const themeLightLabel = activeLanguage === 'ja' ? 'ライト' : 'Light'
+  const themeDarkLabel = activeLanguage === 'ja' ? 'ダーク' : 'Dark'
 
   return (
     <main className="page">
@@ -1308,31 +1293,45 @@ function App() {
           </button>
         ) : null}
 
-        <button
-          className={`theme-toggle-button${isDarkTheme ? ' is-dark' : ''}`}
-          type="button"
-          aria-label={themeAriaLabel}
-          title={themeAriaLabel}
-          onClick={() => setThemePreference(nextThemePreference)}
-        >
-          {themePreference === 'system' ? <MixIcon /> : isDarkTheme ? <SunIcon /> : <MoonIcon />}
-          <span className="theme-toggle-code" aria-hidden="true">
-            {themePreferenceCode}
+        <div className="top-control-select">
+          <span className="top-control-select-icon" aria-hidden="true">
+            <GlobeIcon />
           </span>
-        </button>
+          <select
+            id="language-preference-select"
+            className="top-control-select-input"
+            aria-label={labels.languageAria}
+            value={languagePreference}
+            onChange={(event) => setLanguagePreference(event.target.value as AppLocalePreference)}
+          >
+            <option value="system">{languageSystemLabel}</option>
+            <option value="ja">日本語</option>
+            <option value="en">English</option>
+          </select>
+        </div>
 
-        <button
-          className="language-toggle-button"
-          type="button"
-          aria-label={languageAriaLabel}
-          title={languageAriaLabel}
-          onClick={() => setLanguagePreference(nextLanguagePreference)}
-        >
-          <GlobeIcon />
-          <span className="language-toggle-code" aria-hidden="true">
-            {languagePreferenceCode}
+        <div className="top-control-select">
+          <span className="top-control-select-icon" aria-hidden="true">
+            {themePreference === 'system'
+              ? activeTheme === 'dark'
+                ? <MoonIcon />
+                : <SunIcon />
+              : themePreference === 'dark'
+                ? <MoonIcon />
+                : <SunIcon />}
           </span>
-        </button>
+          <select
+            id="theme-preference-select"
+            className="top-control-select-input"
+            aria-label={labels.themeAria}
+            value={themePreference}
+            onChange={(event) => setThemePreference(event.target.value as AppThemePreference)}
+          >
+            <option value="system">{themeSystemLabel}</option>
+            <option value="light">{themeLightLabel}</option>
+            <option value="dark">{themeDarkLabel}</option>
+          </select>
+        </div>
       </div>
 
       <section className="title-area" aria-label="profile header">

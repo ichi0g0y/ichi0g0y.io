@@ -11,9 +11,9 @@
   position: relative;
   border-radius: 14px;
   background: #ffffff;
-  border: 1px solid #e5e7eb;
+  border: 0;
   padding: 0.65rem;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: box-shadow 0.2s ease;
 }
 
 .gear-item-card.is-admin {
@@ -21,7 +21,6 @@
 }
 
 .gear-item-card.is-admin:hover {
-  border-color: #d5dbe4;
   box-shadow: 0 10px 24px -20px rgba(15, 23, 42, 0.7);
 }
 
@@ -32,7 +31,6 @@
 }
 
 .gear-item-card.is-drop-target {
-  border-color: #a8b6ca;
   box-shadow: 0 0 0 2px rgba(168, 182, 202, 0.35);
 }
 
@@ -81,6 +79,7 @@
   position: relative;
   margin-bottom: 0.55rem;
   border-radius: 12px;
+  background: #ffffff;
   overflow: hidden;
 }
 
@@ -174,7 +173,7 @@
 
 .gear-item-photo.is-contain {
   object-fit: contain;
-  background: #f8fafc;
+  background: #ffffff;
 }
 
 .gear-item-name {

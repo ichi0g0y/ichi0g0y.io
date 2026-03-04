@@ -33,34 +33,25 @@ body[data-theme='dark'] .app-toast {
 }
 
 body[data-theme='dark'] .mode-toggle-button,
-body[data-theme='dark'] .theme-toggle-button,
-body[data-theme='dark'] .language-toggle-button {
+body[data-theme='dark'] .top-control-select {
   background: #111b2f;
   border-color: #2b3953;
   color: #dbe6f7;
 }
 
 body[data-theme='dark'] .mode-toggle-button:hover,
-body[data-theme='dark'] .theme-toggle-button:hover,
-body[data-theme='dark'] .language-toggle-button:hover {
+body[data-theme='dark'] .top-control-select:hover {
   background: #16243f;
   border-color: #435a80;
 }
 
-body[data-theme='dark'] .mode-toggle-button.is-edit,
-body[data-theme='dark'] .theme-toggle-button.is-dark {
+body[data-theme='dark'] .mode-toggle-button.is-edit {
   border-color: #93c5fd;
   color: #93c5fd;
 }
 
-body[data-theme='dark'] .language-toggle-code {
-  background: #2563eb;
-  color: #eff6ff;
-}
-
-body[data-theme='dark'] .theme-toggle-code {
-  background: #2563eb;
-  color: #eff6ff;
+body[data-theme='dark'] .top-control-select-icon {
+  color: #9fb0c9;
 }
 
 body[data-theme='dark'] .name-main,
@@ -138,7 +129,6 @@ body[data-theme='dark'] .card[href*='github.com'] .card-icon {
   filter: brightness(0) invert(1);
 }
 
-body[data-theme='dark'] .gear-item-photo.is-contain,
 body[data-theme='dark'] .image-candidate-button img.is-contain,
 body[data-theme='dark'] .selected-image-preview img.is-contain,
 body[data-theme='dark'] .edit-image-thumb img.is-contain {
