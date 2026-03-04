@@ -18,6 +18,8 @@ build/
 .env
 .env.local
 .env.*.local
+.dev.vars
+.wrangler/
 
 # IDE and editor
 .vscode/

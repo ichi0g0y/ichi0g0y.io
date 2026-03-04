@@ -1,0 +1,62 @@
+@media (max-width: 860px) {
+  .twitch-zone {
+    width: min(420px, 84vw);
+  }
+
+  .twitch-wide-card {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    width: min(420px, 84vw);
+  }
+
+  .gear-zone {
+    width: min(420px, 84vw);
+    padding: 0.85rem;
+  }
+
+  .gear-item-grid {
+    grid-template-columns: 1fr;
+    gap: 0.7rem;
+  }
+
+  .gear-add-button {
+    top: 0;
+  }
+
+  .admin-form {
+    grid-template-columns: 1fr;
+  }
+
+  .image-candidate-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .edit-image-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .edit-image-fetch-row {
+    grid-template-columns: 1fr;
+  }
+
+  .twitch-side-link {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 0.7rem;
+    padding: 0.75rem 0.85rem;
+  }
+
+  .twitch-side-icon {
+    height: 44px;
+  }
+
+  .twitch-side-title {
+    margin: 0;
+  }
+
+  .twitch-main {
+    width: 100%;
+  }
+}

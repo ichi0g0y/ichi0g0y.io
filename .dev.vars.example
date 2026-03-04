@@ -1,0 +1,7 @@
+ACCESS_TOKEN_SECRET=replace-with-long-random-string
+ALLOWED_GITHUB_LOGINS=your-github-login,ichi0g0y
+GITHUB_CLIENT_ID=replace-with-github-oauth-app-client-id
+GITHUB_CLIENT_SECRET=replace-with-github-oauth-app-client-secret
+APP_ORIGIN=http://localhost:5173
+OPENAI_API_KEY=replace-with-openai-api-key
+OPENAI_MODEL=gpt-4.1-mini

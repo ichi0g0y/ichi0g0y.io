@@ -1,42 +1,82 @@
-# agentic-boilerplate-seed
+# ICH Portfolio
 
-言語やフレームワークをまだ決めていない状態で、AI（Codex / Claude）と協調しながらプロジェクトを立ち上げるための最小ボイラープレートです。
+`Bun + TypeScript + React + Vite + Tailwind + Radix UI` で構築した、シンプルなSPAポートフォリオです。
 
-## このテンプレートの方針
+## セットアップ
 
-- 実装前にAI運用ルールを先に固定する
-- 技術スタック未決定でも使えるよう、言語依存ルールを持ち込まない
-- レビュー連携は手動コピーまたは `.context/` 経由で共有する
-- 修正内容・進行状況・計画・手順・レビュー観点は GitHub Issues に集約し、`docs/` は確定情報のみを保持する
-- Issue単位でworktreeを分離し、小さなPRを順次適用する
+```bash
+bun install
+cp .dev.vars.example .dev.vars
+```
 
-## ディレクトリ構成
+GitHub OAuth App を作成し、Authorization callback URL に `http://localhost:5173/api/auth/github/callback` を設定してください。
 
-- `.ai/`: エージェント共通ルール（必読）
-- `.claude/commands/`: Claude用コマンド定義（pick / p / deploy-to-production / dtp / deploy-to-staging / dts / commit / c / commit! / c!）
-- `docs/`: 最小限の運用ドキュメント
-- `.context/`: エージェント間の作業連携用（gitignore前提）
+翻訳を有効にする場合は `.dev.vars` に `OPENAI_API_KEY`（必要に応じて `OPENAI_MODEL`）を設定してください。
 
-## 使い始める手順
+## 開発サーバー
 
-1. `docs/guides/GETTING_STARTED.md` を読む
-2. `.ai/project.md` に今回の目的と制約を書く
-3. 言語選定までは、設計・要件・タスク分解（GitHub Issues）を中心に進める
-4. 言語選定後に、必要な開発/テストコマンドを `docs/` と `.ai/` に追加する
+```bash
+task dev
+```
 
-## AI協調フロー
+`task dev` は Web と Workers API を同時起動します。
 
-- 実装: 指示に沿って実装し、必要な検証結果を報告
-- `/pick` or `/p`: 必要時のみ対象Issueを `.context/current_issue` に固定
-- レビュー: 指摘を手動コピーまたは `.context/` 経由で共有
-- `/deploy-to-production` or `/dtp`: `develop -> main` のリリースPR作成導線
-- `/deploy-to-staging` or `/dts`: `develop -> staging` の反映PR作成導線
-- `/commit` or `/c`: 確認付きコミット
-- `/commit!` or `/c!`: 即時コミット
+フロントエンドのみ起動したい場合:
 
-## GitHub操作の方針
+```bash
+task dev-web
+```
 
-- GitHub操作の手段は固定しない
-- 実行手段が変わっても、Issue / PR / コメント / ラベルの結果を一致させる
+Workers API のみ起動したい場合:
 
-詳細は `.ai/workflow.md` と `docs/guides/ISSUE_WORKFLOW.md` を参照してください。
+```bash
+task worker-dev
+```
+
+初回はD1マイグレーションをローカル適用してください。
+
+```bash
+task d1-migrate-local
+```
+
+## 環境データの保存/復元
+
+Worktree 間で開発用データを引き継ぐため、`~/.envs/<repo名>/` に保存/復元できます。
+
+```bash
+task env:save
+task env:restore
+```
+
+対象:
+
+- `.envrc`
+- `.dev.vars`
+- `.dev.vars.example`
+- `env/`
+- `.wrangler/state/`（ローカルD1など）
+
+`conductor.json` の `setup` では復元 (`env:restore` 相当) を自動実行します。
+
+## ビルド
+
+```bash
+bun run build
+```
+
+## 技術スタック
+
+- Bun
+- React 19 + TypeScript
+- Vite 7
+- Tailwind CSS 4
+- Radix UI (`Icons`)
+- Cloudflare Workers + D1
+
+## 仕様
+
+- 画面表示名は `ICH`
+- Twitch / X / GitHub の外部リンクを掲載
+- 1ページ完結のSPA
+- 隠し管理モード（GitHub OAuth + access/refresh token）
+- URLからOG情報を取得して機材カードを追加

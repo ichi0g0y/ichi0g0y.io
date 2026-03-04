@@ -1,0 +1,146 @@
+import type { GearItem } from './types'
+
+export const links = [
+  {
+    label: 'GitHub',
+    href: 'https://github.com/ichi0g0y',
+    icon: '/icons/github.png',
+  },
+  {
+    label: 'Twitter',
+    href: 'https://x.com/ichi0g0y',
+    icon: '/icons/twitter.svg',
+  },
+  {
+    label: 'Discord',
+    href: 'https://discord.gg/Y4SGjwauNS',
+    icon: '/icons/discord.svg',
+  },
+  {
+    label: 'Dropbox',
+    href: 'https://www.dropbox.com/scl/fo/w38k8gn54kp681gv1nc8b/ADf0yoRtRXCLhwLOOZuhWp0?rlkey=eutco8gaj0zlkcg9iaqzlciqa&dl=0',
+    icon: '/icons/dropbox.svg',
+  },
+] as const
+
+export const fallbackGearItems: GearItem[] = [
+  {
+    id: 1,
+    title: 'Ryzen 9 7950X3D',
+    category: 'ゲーミングPC',
+    imageUrl: '/gear/gaming-pc.jpg',
+    imageUrls: ['/gear/gaming-pc.jpg'],
+    imageFit: 'cover',
+    linkUrl: null,
+    description: null,
+    sortOrder: 10,
+    createdAt: 0,
+    updatedAt: 0,
+  },
+  {
+    id: 2,
+    title: 'ASUS RTX4070ti Super',
+    category: 'ゲーミングPC',
+    imageUrl: '/gear/gaming-pc.jpg',
+    imageUrls: ['/gear/gaming-pc.jpg'],
+    imageFit: 'cover',
+    linkUrl: null,
+    description: null,
+    sortOrder: 20,
+    createdAt: 0,
+    updatedAt: 0,
+  },
+  {
+    id: 3,
+    title: 'DDR5 64GB',
+    category: 'ゲーミングPC',
+    imageUrl: '/gear/gaming-pc.jpg',
+    imageUrls: ['/gear/gaming-pc.jpg'],
+    imageFit: 'cover',
+    linkUrl: null,
+    description: null,
+    sortOrder: 30,
+    createdAt: 0,
+    updatedAt: 0,
+  },
+  {
+    id: 4,
+    title: 'Mac Strudio M4 Max 64GB',
+    category: '配信機材',
+    imageUrl: '/gear/stream-audio.jpg',
+    imageUrls: ['/gear/stream-audio.jpg'],
+    imageFit: 'cover',
+    linkUrl: null,
+    description: null,
+    sortOrder: 40,
+    createdAt: 0,
+    updatedAt: 0,
+  },
+  {
+    id: 5,
+    title: 'BabyFace Pro fs',
+    category: '配信機材',
+    imageUrl: '/gear/stream-audio.jpg',
+    imageUrls: ['/gear/stream-audio.jpg'],
+    imageFit: 'cover',
+    linkUrl: null,
+    description: null,
+    sortOrder: 50,
+    createdAt: 0,
+    updatedAt: 0,
+  },
+  {
+    id: 6,
+    title: 'SM7B',
+    category: '配信機材',
+    imageUrl: '/gear/stream-audio.jpg',
+    imageUrls: ['/gear/stream-audio.jpg'],
+    imageFit: 'cover',
+    linkUrl: null,
+    description: null,
+    sortOrder: 60,
+    createdAt: 0,
+    updatedAt: 0,
+  },
+]
+
+export const TYPE_START_DELAY_MS = 360
+export const BASE_TYPE_SPEED_MS = 24
+export const TYPE_SPEED_RANDOM_MS = 42
+export const PUNCTUATION_PAUSE_MS = 130
+export const HIDDEN_TAP_TARGET = 5
+export const HIDDEN_TAP_WINDOW_MS = 1800
+export const TWITCH_CHANNEL = 'ichi0g0y'
+export const DEFAULT_NEW_GEAR_CATEGORY = 'その他'
+export const APP_LOCALE_STORAGE_KEY = 'app-locale'
+// 手動切り替え: 配信中なら true、オフラインなら false
+export const IS_LIVE = true
+
+export const UI_LABELS = {
+  ja: {
+    modeEdit: '編集モード',
+    modeView: '閲覧モード',
+    offlineTitle: '現在はオフラインです',
+    offlineText: '次の配信まで少し待っててください。',
+    picksHeading: 'Picks',
+    picksDescription: '配信と制作で使っている機材や好きなものをまとめています。',
+    affiliateNote: '**リンクはアフィリエイトではありません**',
+    allCategory: 'すべて',
+    gearLoading: '機材情報を読み込み中...',
+    noItems: '選択中のカテゴリには機材がありません。',
+    languageAria: '英語に切り替え',
+  },
+  en: {
+    modeEdit: 'Edit mode',
+    modeView: 'View mode',
+    offlineTitle: 'Currently offline',
+    offlineText: 'Please check back for the next stream.',
+    picksHeading: 'Picks',
+    picksDescription: 'A collection of gear and favorite things I use for streaming and creating.',
+    affiliateNote: '**These links are not affiliate links**',
+    allCategory: 'All',
+    gearLoading: 'Loading picks...',
+    noItems: 'No items in the selected category.',
+    languageAria: '日本語に切り替え',
+  },
+} as const
