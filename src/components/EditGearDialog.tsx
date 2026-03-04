@@ -30,6 +30,8 @@ export type EditGearDialogProps = {
   onSetEditDescription: (value: string) => void
   onSetEditDescriptionEn: (value: string) => void
   onSetEditCategory: (value: string) => void
+  isTranslatingEditDescriptionEn: boolean
+  onTranslateEditDescriptionEn: () => void
   onSetEditImageUrlInput: (value: string) => void
   onSetEditPreviewUrl: (value: string) => void
   onSetEditImageFit: (value: GearItem['imageFit']) => void
@@ -71,6 +73,8 @@ export function EditGearDialog({
   onSetEditDescription,
   onSetEditDescriptionEn,
   onSetEditCategory,
+  isTranslatingEditDescriptionEn,
+  onTranslateEditDescriptionEn,
   onSetEditImageUrlInput,
   onSetEditPreviewUrl,
   onSetEditImageFit,
@@ -140,7 +144,17 @@ export function EditGearDialog({
             />
           </label>
           <label className="admin-label">
-            説明（英語）
+            <span className="admin-label-row">
+              <span>説明（英語）</span>
+              <button
+                className="admin-button ghost admin-inline-button"
+                type="button"
+                onClick={onTranslateEditDescriptionEn}
+                disabled={isUpdating || isTranslatingEditDescriptionEn || editDescription.trim().length < 1}
+              >
+                {isTranslatingEditDescriptionEn ? '翻訳中...' : '日本語から英訳'}
+              </button>
+            </span>
             <textarea
               className="admin-textarea"
               value={editDescriptionEn}

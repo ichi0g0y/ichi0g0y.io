@@ -6,6 +6,7 @@ import {
   handlePreview,
   handleRenameGearCategory,
   handleReorderGearItems,
+  handleTranslateGearDescription,
   handleUpdateGearItem,
 } from './gear'
 import type { Env } from './types'
@@ -54,6 +55,14 @@ async function routeApi(request: Request, env: Env) {
       return errorResponse('認証が必要です', 401)
     }
     return handleCreateGearFromUrl(request, env)
+  }
+
+  if (method === 'POST' && pathname === '/api/admin/gear-items/translate-description') {
+    const auth = await requireAuth(request, env)
+    if (!auth) {
+      return errorResponse('認証が必要です', 401)
+    }
+    return handleTranslateGearDescription(request, env)
   }
 
   if (method === 'PATCH' && pathname === '/api/admin/gear-items/reorder') {

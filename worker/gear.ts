@@ -37,6 +37,42 @@ export async function handlePreview(request: Request) {
   }
 }
 
+export async function handleTranslateGearDescription(request: Request, env: Env) {
+  const body = await readJsonBody<{
+    title?: string
+    category?: string
+    description?: string
+  }>(request)
+  const title = typeof body?.title === 'string' ? body.title.trim() : ''
+  const category = typeof body?.category === 'string' ? body.category.trim() : ''
+  const description = typeof body?.description === 'string' ? body.description.trim() : ''
+
+  if (!description) {
+    return errorResponse('翻訳対象の日本語説明を入力してください', 400)
+  }
+
+  if (!env.OPENAI_API_KEY?.trim()) {
+    return errorResponse('翻訳機能が未設定です（OPENAI_API_KEY が必要です）', 400)
+  }
+
+  const translated = await translateToEnglishWithOpenAI(
+    {
+      title: title || 'Untitled',
+      category: category || 'Other',
+      description,
+    },
+    env,
+  )
+  if (!translated.descriptionEn) {
+    return errorResponse('英語説明の生成に失敗しました', 502)
+  }
+
+  return jsonResponse({
+    ok: true,
+    descriptionEn: translated.descriptionEn,
+  })
+}
+
 async function updateExistingGearItem(
   env: Env,
   existing: GearRow,

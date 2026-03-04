@@ -146,6 +146,7 @@ function App() {
   const [editImageCandidates, setEditImageCandidates] = useState<string[]>([])
   const [editImageFit, setEditImageFit] = useState<GearItem['imageFit']>('contain')
   const [isFetchingEditPreview, setIsFetchingEditPreview] = useState(false)
+  const [isTranslatingEditDescriptionEn, setIsTranslatingEditDescriptionEn] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [gearImageIndexes, setGearImageIndexes] = useState<Record<number, number>>({})
@@ -478,6 +479,7 @@ function App() {
       setEditPreviewUrl('')
       setEditImageCandidates([])
       setIsFetchingEditPreview(false)
+      setIsTranslatingEditDescriptionEn(false)
       setEditImageFit('contain')
       setRenameCategoryTarget(null)
       setRenameCategoryValue('')
@@ -507,6 +509,7 @@ function App() {
     setEditPreviewUrl(item.linkUrl ?? '')
     setEditImageCandidates([])
     setIsFetchingEditPreview(false)
+    setIsTranslatingEditDescriptionEn(false)
     setEditImageFit(item.imageFit)
     setIsAddFormOpen(false)
   }, [])
@@ -777,6 +780,7 @@ function App() {
         setEditPreviewUrl('')
         setEditImageCandidates([])
         setIsFetchingEditPreview(false)
+        setIsTranslatingEditDescriptionEn(false)
         setEditImageFit('contain')
       }
       setDeleteConfirmTarget(null)
@@ -1017,6 +1021,7 @@ function App() {
     setEditPreviewUrl('')
     setEditImageCandidates([])
     setIsFetchingEditPreview(false)
+    setIsTranslatingEditDescriptionEn(false)
     setEditImageFit('contain')
   }, [])
 
@@ -1044,6 +1049,7 @@ function App() {
     setEditPreviewUrl('')
     setEditImageCandidates([])
     setIsFetchingEditPreview(false)
+    setIsTranslatingEditDescriptionEn(false)
     setEditImageFit('contain')
     setRenameCategoryTarget(null)
     setRenameCategoryValue('')
@@ -1144,6 +1150,7 @@ function App() {
         setEditPreviewUrl('')
         setEditImageCandidates([])
         setIsFetchingEditPreview(false)
+        setIsTranslatingEditDescriptionEn(false)
         setEditImageFit('contain')
         showToast('カードを更新しました。', 'success')
       } catch (error) {
@@ -1170,6 +1177,38 @@ function App() {
       sortGearItems,
     ],
   )
+
+  const handleTranslateEditDescriptionEn = useCallback(async () => {
+    const sourceDescription = editDescription.trim()
+    if (!sourceDescription) {
+      showToast('日本語説明を入力してください', 'error')
+      return
+    }
+
+    setIsTranslatingEditDescriptionEn(true)
+    try {
+      const data = await requestWithAuth('/api/admin/gear-items/translate-description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: editTitle.trim(),
+          category: editCategory.trim(),
+          description: sourceDescription,
+        }),
+      })
+      const translatedDescription = typeof data.descriptionEn === 'string' ? data.descriptionEn.trim() : ''
+      if (!translatedDescription) {
+        throw new Error('英語説明の生成に失敗しました')
+      }
+      setEditDescriptionEn(translatedDescription)
+      showToast('英語説明を更新しました。', 'success')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '英語説明の生成に失敗しました'
+      showToast(message, 'error')
+    } finally {
+      setIsTranslatingEditDescriptionEn(false)
+    }
+  }, [editCategory, editDescription, editTitle, requestWithAuth, showToast])
 
   const handleAddEditImageUrl = useCallback(() => {
     const nextUrl = editImageUrlInput.trim()
@@ -1724,6 +1763,8 @@ function App() {
           onSetEditDescription={setEditDescription}
           onSetEditDescriptionEn={setEditDescriptionEn}
           onSetEditCategory={setEditCategory}
+          isTranslatingEditDescriptionEn={isTranslatingEditDescriptionEn}
+          onTranslateEditDescriptionEn={handleTranslateEditDescriptionEn}
           onSetEditImageUrlInput={setEditImageUrlInput}
           onSetEditPreviewUrl={setEditPreviewUrl}
           onSetEditImageFit={setEditImageFit}
