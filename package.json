@@ -1,16 +1,18 @@
 {
-  "name": "ich-portfolio",
+  "name": "ichi0g0y.io",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "worker:dev": "mkdir -p dist && wrangler dev --local --port 8787",
+    "worker:dev": "mkdir -p dist && wrangler dev --local --env dev --port 8787",
     "worker:deploy": "wrangler deploy",
-    "d1:migrate:local": "wrangler d1 migrations apply ichi0g0y_portfolio --local",
-    "d1:migrate:remote": "wrangler d1 migrations apply ichi0g0y_portfolio --remote",
+    "d1:migrate:local": "wrangler d1 migrations apply ichi0g0y-io --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply ichi0g0y-io --remote",
     "d1:backfill:i18n:local": "bun --env-file .dev.vars scripts/backfill_gear_i18n.ts --local",
     "d1:backfill:i18n:remote": "bun --env-file .dev.vars scripts/backfill_gear_i18n.ts --remote",
+    "images:backfill:r2:local": "bun scripts/backfill_gear_images_to_r2.ts --local",
+    "images:backfill:r2:remote": "bun scripts/backfill_gear_images_to_r2.ts --remote",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"

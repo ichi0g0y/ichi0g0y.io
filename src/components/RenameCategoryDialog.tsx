@@ -2,19 +2,21 @@ import { Cross2Icon } from '@radix-ui/react-icons'
 import type { FormEvent } from 'react'
 
 export type RenameCategoryDialogProps = {
-  renameCategoryTarget: string
   renameCategoryValue: string
+  renameCategoryValueEn: string
   isRenamingCategory: boolean
   onChange: (value: string) => void
+  onChangeEn: (value: string) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onClose: () => void
 }
 
 export function RenameCategoryDialog({
-  renameCategoryTarget,
   renameCategoryValue,
+  renameCategoryValueEn,
   isRenamingCategory,
   onChange,
+  onChangeEn,
   onSubmit,
   onClose,
 }: RenameCategoryDialogProps) {
@@ -41,21 +43,27 @@ export function RenameCategoryDialog({
         </div>
         <form className="admin-form auth-form" onSubmit={onSubmit}>
           <label className="admin-label">
-            変更前
-            <input className="admin-input" type="text" value={renameCategoryTarget} readOnly />
-          </label>
-          <label className="admin-label">
-            変更後
+            日本語カテゴリ
             <input
               className="admin-input"
               type="text"
               value={renameCategoryValue}
               onChange={(event) => onChange(event.target.value)}
-              placeholder="新しいカテゴリ名"
+              placeholder="新しいカテゴリ名（日本語）"
               required
             />
           </label>
-          <p className="add-dialog-note">同じカテゴリ名のカードすべてに反映されます。</p>
+          <label className="admin-label">
+            英語カテゴリ
+            <input
+              className="admin-input"
+              type="text"
+              value={renameCategoryValueEn}
+              onChange={(event) => onChangeEn(event.target.value)}
+              placeholder="New category name (English)"
+            />
+          </label>
+          <p className="add-dialog-note">同じカテゴリのカードすべてに反映されます。</p>
           <div className="admin-form-actions">
             <button
               className="admin-button ghost"

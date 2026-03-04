@@ -108,7 +108,7 @@ function buildGitHubApiHeaders(accessToken: string) {
   return {
     Accept: 'application/vnd.github+json',
     Authorization: `Bearer ${accessToken}`,
-    'User-Agent': 'ichi0g0y-portfolio-worker',
+    'User-Agent': 'ichi0g0y-io-worker',
     'X-GitHub-Api-Version': '2022-11-28',
   }
 }
