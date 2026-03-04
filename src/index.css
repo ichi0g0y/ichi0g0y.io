@@ -186,6 +186,8 @@ body {
 
 .twitch-main {
   min-width: 0;
+  border-radius: 16px;
+  background: #ffffff;
 }
 
 .twitch-embed-wrap {
@@ -199,6 +201,7 @@ body {
   aspect-ratio: 16 / 9;
   border: 0;
   display: block;
+  background: #ffffff;
 }
 
 .twitch-offline {
@@ -707,6 +710,7 @@ body {
 }
 
 .image-candidate-button {
+  position: relative;
   padding: 0;
   border: 1px solid #d5dbe4;
   border-radius: 10px;
@@ -721,6 +725,11 @@ body {
   aspect-ratio: 4 / 3;
   object-fit: cover;
   display: block;
+}
+
+.image-candidate-button img.is-contain {
+  object-fit: contain;
+  background: #f8fafc;
 }
 
 .image-candidate-button:hover {
@@ -757,6 +766,7 @@ body {
 }
 
 .selected-image-preview {
+  position: relative;
   width: 100%;
   border-radius: 10px;
   border: 1px solid #d5dbe4;
@@ -772,6 +782,11 @@ body {
   aspect-ratio: 4 / 3;
   object-fit: cover;
   display: block;
+}
+
+.selected-image-preview img.is-contain {
+  object-fit: contain;
+  background: #f8fafc;
 }
 
 .selected-image-empty {
@@ -834,6 +849,7 @@ body {
 }
 
 .edit-image-thumb {
+  position: relative;
   width: 100%;
   border: 0;
   border-radius: 8px;
@@ -848,6 +864,24 @@ body {
   aspect-ratio: 4 / 3;
   object-fit: cover;
   display: block;
+}
+
+.edit-image-thumb img.is-contain {
+  object-fit: contain;
+  background: #f8fafc;
+}
+
+.preview-image-size {
+  position: absolute;
+  right: 0.35rem;
+  bottom: 0.35rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #f8fafc;
+  padding: 0.12rem 0.38rem;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  pointer-events: none;
 }
 
 .edit-image-actions {
@@ -880,6 +914,24 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.26rem;
+}
+
+.gear-filter-chip-wrap.is-draggable {
+  cursor: grab;
+}
+
+.gear-filter-chip-wrap.is-draggable .gear-filter-chip {
+  cursor: inherit;
+}
+
+.gear-filter-chip-wrap.is-dragging {
+  opacity: 0.58;
+  cursor: grabbing;
+}
+
+.gear-filter-chip-wrap.is-drop-target .gear-filter-chip {
+  border-color: #a8b6ca;
+  box-shadow: 0 0 0 2px rgba(168, 182, 202, 0.35);
 }
 
 .gear-filter-chip {
@@ -968,6 +1020,10 @@ body {
 .gear-item-card.is-drop-target {
   border-color: #a8b6ca;
   box-shadow: 0 0 0 2px rgba(168, 182, 202, 0.35);
+}
+
+.gear-item-card.is-category-muted {
+  opacity: 0.42;
 }
 
 .gear-card-actions {
@@ -1150,6 +1206,49 @@ body {
   text-align: center;
   font-size: 0.8rem;
   color: #6b7280;
+}
+
+.language-toggle-button {
+  position: fixed;
+  left: 1rem;
+  bottom: 1rem;
+  z-index: 115;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #d5dbe4;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #475569;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.language-toggle-button:hover {
+  border-color: #b9c4d3;
+  background: #ffffff;
+}
+
+.language-toggle-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.language-toggle-code {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 9px;
+  line-height: 16px;
+  font-weight: 700;
+  text-align: center;
 }
 
 .app-toast {

@@ -1,4 +1,4 @@
-import { ChevronDownIcon, Cross2Icon, EyeOpenIcon, Pencil2Icon, PlusIcon } from '@radix-ui/react-icons'
+import { ChevronDownIcon, Cross2Icon, EyeOpenIcon, GlobeIcon, Pencil2Icon, PlusIcon } from '@radix-ui/react-icons'
 import { Command } from 'cmdk'
 import {
   useCallback,
@@ -9,6 +9,7 @@ import {
   type DragEvent,
   type FormEvent,
   type MouseEvent as ReactMouseEvent,
+  type SyntheticEvent,
 } from 'react'
 
 const links = [
@@ -37,12 +38,15 @@ const links = [
 type GearItem = {
   id: number
   title: string
+  titleEn?: string | null
   category: string
+  categoryEn?: string | null
   imageUrl: string | null
   imageUrls: string[]
   imageFit: 'cover' | 'contain'
   linkUrl: string | null
   description: string | null
+  descriptionEn?: string | null
   sortOrder: number
   createdAt: number
   updatedAt: number
@@ -64,6 +68,13 @@ type ToastState = {
   message: string
   tone: ToastTone
 }
+
+type ImageSize = {
+  width: number
+  height: number
+}
+
+type AppLocale = 'ja' | 'en'
 
 const fallbackGearItems: GearItem[] = [
   {
@@ -153,11 +164,52 @@ const PUNCTUATION_PAUSE_MS = 130
 const HIDDEN_TAP_TARGET = 5
 const HIDDEN_TAP_WINDOW_MS = 1800
 const TWITCH_CHANNEL = 'ichi0g0y'
+const DEFAULT_NEW_GEAR_CATEGORY = 'その他'
+const APP_LOCALE_STORAGE_KEY = 'app-locale'
 // 手動切り替え: 配信中なら true、オフラインなら false
 const IS_LIVE = true
 
-function getGreetingByHour(date: Date) {
+const UI_LABELS = {
+  ja: {
+    modeEdit: '編集モード',
+    modeView: '閲覧モード',
+    offlineTitle: '現在はオフラインです',
+    offlineText: '次の配信まで少し待っててください。',
+    picksHeading: 'Picks',
+    picksDescription: '配信と制作で使っている機材や好きなものをまとめています。',
+    affiliateNote: '**リンクはアフィリエイトではありません**',
+    allCategory: 'すべて',
+    gearLoading: '機材情報を読み込み中...',
+    noItems: '選択中のカテゴリには機材がありません。',
+    languageAria: '英語に切り替え',
+  },
+  en: {
+    modeEdit: 'Edit mode',
+    modeView: 'View mode',
+    offlineTitle: 'Currently offline',
+    offlineText: 'Please check back for the next stream.',
+    picksHeading: 'Picks',
+    picksDescription: 'A collection of gear and favorite things I use for streaming and creating.',
+    affiliateNote: '**These links are not affiliate links**',
+    allCategory: 'All',
+    gearLoading: 'Loading picks...',
+    noItems: 'No items in the selected category.',
+    languageAria: '日本語に切り替え',
+  },
+} as const
+
+function getGreetingByHour(date: Date, locale: AppLocale) {
   const hour = date.getHours()
+
+  if (locale === 'en') {
+    if (hour >= 4 && hour < 11) {
+      return 'Good morning'
+    }
+    if (hour >= 11 && hour < 18) {
+      return 'Hello'
+    }
+    return 'Good evening'
+  }
 
   if (hour >= 4 && hour < 11) {
     return 'おはようございます'
@@ -170,8 +222,12 @@ function getGreetingByHour(date: Date) {
   return 'こんばんは'
 }
 
-function createIntroMessage() {
-  const greeting = getGreetingByHour(new Date())
+function createIntroMessage(locale: AppLocale) {
+  const greeting = getGreetingByHour(new Date(), locale)
+
+  if (locale === 'en') {
+    return `${greeting},\n\nI'm ICH.\n\nI'm a casual programmer based in Hyogo, Japan. On GitHub, I build vibe-coded projects, and on Twitch I stream work chats, retro console mods, and various games from time to time.\n\nI like making things slowly and playing games lazily. Feel free to say hi anytime.`
+  }
 
   return `${greeting}、\n\nICH (いち) ともうします。\n\n兵庫在住のライトプログラマー。GitHubではバイブコーディングを中心に制作し、Twitchでは作業雑談やレトロゲーム機の改造配信、各種ゲーム配信を不定期で行っています。\n\nゆるく作って、だらだら遊ぶのが好きです。気になったら気軽に声をかけてください。`
 }
@@ -226,9 +282,12 @@ function normalizeGearItem(item: GearItem): GearItem {
   const imageUrls = normalizeImageUrls(item.imageUrls, item.imageUrl)
   return {
     ...item,
+    titleEn: item.titleEn ?? null,
+    categoryEn: item.categoryEn ?? null,
     imageUrl: imageUrls[0] ?? null,
     imageUrls,
     imageFit: normalizeImageFit(item.imageFit),
+    descriptionEn: item.descriptionEn ?? null,
   }
 }
 
@@ -366,7 +425,18 @@ function CategoryCommandField({ value, options, onValueChange, placeholder }: Ca
 }
 
 function App() {
-  const introChars = useMemo(() => Array.from(createIntroMessage()), [])
+  const [language, setLanguage] = useState<AppLocale>(() => {
+    if (typeof window === 'undefined') {
+      return 'ja'
+    }
+    const stored = window.localStorage.getItem(APP_LOCALE_STORAGE_KEY)
+    if (stored === 'ja' || stored === 'en') {
+      return stored
+    }
+    return window.navigator.language.toLowerCase().startsWith('ja') ? 'ja' : 'en'
+  })
+  const labels = UI_LABELS[language]
+  const introChars = useMemo(() => Array.from(createIntroMessage(language)), [language])
   const twitchChannelUrl = `https://www.twitch.tv/${TWITCH_CHANNEL}`
   const twitchEmbedSrc = useMemo(() => {
     const parent = window.location.hostname || 'localhost'
@@ -385,7 +455,7 @@ function App() {
   const [newGearUrl, setNewGearUrl] = useState('')
   const [newGearTitle, setNewGearTitle] = useState('')
   const [newGearDescription, setNewGearDescription] = useState('')
-  const [newGearCategory, setNewGearCategory] = useState('')
+  const [newGearCategory, setNewGearCategory] = useState(DEFAULT_NEW_GEAR_CATEGORY)
   const [newGearImageUrls, setNewGearImageUrls] = useState<string[]>([])
   const [newGearImageCandidates, setNewGearImageCandidates] = useState<string[]>([])
   const [newGearImageFit, setNewGearImageFit] = useState<GearItem['imageFit']>('contain')
@@ -396,6 +466,8 @@ function App() {
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<GearItem | null>(null)
   const [draggingGearId, setDraggingGearId] = useState<number | null>(null)
   const [dragOverGearId, setDragOverGearId] = useState<number | null>(null)
+  const [draggingCategory, setDraggingCategory] = useState<string | null>(null)
+  const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [isReordering, setIsReordering] = useState(false)
   const [editingGearId, setEditingGearId] = useState<number | null>(null)
   const [editTitle, setEditTitle] = useState('')
@@ -417,6 +489,8 @@ function App() {
   const [renameCategoryTarget, setRenameCategoryTarget] = useState<string | null>(null)
   const [renameCategoryValue, setRenameCategoryValue] = useState('')
   const [isRenamingCategory, setIsRenamingCategory] = useState(false)
+  const [imageSizesByUrl, setImageSizesByUrl] = useState<Record<string, ImageSize>>({})
+  const addDialogUrlInputRef = useRef<HTMLInputElement | null>(null)
   const tapStateRef = useRef({ count: 0, lastTappedAt: 0 })
   const isAdminEditing = Boolean(accessToken && isEditMode)
   const isModeToggleLocked = isAdding || isFetchingPreview || isUpdating || deletingGearId !== null || isRenamingCategory
@@ -434,6 +508,19 @@ function App() {
     return Array.from(new Set(gearItems.map((item) => item.category.trim()).filter((category) => category.length > 0)))
   }, [gearItems])
 
+  const categoryDisplayMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of gearItems) {
+      const sourceCategory = item.category.trim()
+      if (!sourceCategory || map.has(sourceCategory)) {
+        continue
+      }
+      const translatedCategory = item.categoryEn?.trim()
+      map.set(sourceCategory, language === 'en' && translatedCategory ? translatedCategory : sourceCategory)
+    }
+    return map
+  }, [gearItems, language])
+
   const filteredGearItems = useMemo(() => {
     if (selectedCategory === 'all') {
       return gearItems
@@ -443,9 +530,51 @@ function App() {
   const newGearImageUrlSet = useMemo(() => new Set(newGearImageUrls), [newGearImageUrls])
   const editImageUrlSet = useMemo(() => new Set(editImageUrls), [editImageUrls])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    window.localStorage.setItem(APP_LOCALE_STORAGE_KEY, language)
+  }, [language])
+  const newGearPrimaryImageUrl = newGearImageUrls[0] ?? null
+
   const showToast = useCallback((message: string, tone: ToastTone = 'info') => {
     setToast({ id: Date.now(), message, tone })
   }, [])
+
+  const handlePreviewImageLoad = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
+    const image = event.currentTarget
+    const sizeKey = image.dataset.sizeKey?.trim()
+    if (!sizeKey) {
+      return
+    }
+    const width = image.naturalWidth
+    const height = image.naturalHeight
+    if (width < 1 || height < 1) {
+      return
+    }
+    setImageSizesByUrl((previous) => {
+      const current = previous[sizeKey]
+      if (current?.width === width && current?.height === height) {
+        return previous
+      }
+      return {
+        ...previous,
+        [sizeKey]: { width, height },
+      }
+    })
+  }, [])
+
+  const getImageSizeLabel = useCallback(
+    (url: string) => {
+      const size = imageSizesByUrl[url]
+      if (!size) {
+        return ''
+      }
+      return `${size.width} x ${size.height}`
+    },
+    [imageSizesByUrl],
+  )
 
   const parseApiResponse = useCallback(async (response: Response) => {
     const data = await response.json().catch(() => null)
@@ -496,6 +625,7 @@ function App() {
 
   useEffect(() => {
     let nextTypeTimer: ReturnType<typeof setTimeout> | null = null
+    setTypedChars([])
 
     const typeStartTimer = setTimeout(() => {
       let index = 0
@@ -563,6 +693,18 @@ function App() {
       clearTimeout(timer)
     }
   }, [toast])
+
+  useEffect(() => {
+    if (!isAddFormOpen || addDialogStep !== 'url') {
+      return
+    }
+    const frameId = window.requestAnimationFrame(() => {
+      addDialogUrlInputRef.current?.focus()
+    })
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [addDialogStep, isAddFormOpen])
 
   const isTypingDone = typedChars.length >= introChars.length
 
@@ -645,7 +787,7 @@ function App() {
       setNewGearUrl('')
       setNewGearTitle('')
       setNewGearDescription('')
-      setNewGearCategory('')
+      setNewGearCategory(DEFAULT_NEW_GEAR_CATEGORY)
       setNewGearImageUrls([])
       setNewGearImageCandidates([])
       setNewGearImageFit('contain')
@@ -697,7 +839,7 @@ function App() {
     setNewGearUrl('')
     setNewGearTitle('')
     setNewGearDescription('')
-    setNewGearCategory('')
+    setNewGearCategory(DEFAULT_NEW_GEAR_CATEGORY)
     setNewGearImageUrls([])
     setNewGearImageCandidates([])
     setNewGearImageFit('contain')
@@ -795,6 +937,7 @@ function App() {
         setNewGearUrl((preview.url ?? targetUrl).trim())
         setNewGearTitle((preview.title ?? '').trim())
         setNewGearDescription((preview.description ?? '').trim())
+        setNewGearCategory(DEFAULT_NEW_GEAR_CATEGORY)
         const previewImageUrl = (preview.imageUrl ?? '').trim()
         const previewImageCandidates = (preview.imageCandidates ?? []).filter(
           (candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0,
@@ -860,7 +1003,7 @@ function App() {
         setNewGearUrl('')
         setNewGearTitle('')
         setNewGearDescription('')
-        setNewGearCategory('')
+        setNewGearCategory(DEFAULT_NEW_GEAR_CATEGORY)
         setNewGearImageUrls([])
         setNewGearImageCandidates([])
         setNewGearImageFit('contain')
@@ -942,26 +1085,92 @@ function App() {
     }
   }, [deleteConfirmTarget, editingGearId, requestWithAuth, showToast])
 
-  const reorderGearItems = useCallback((items: GearItem[], sourceId: number, targetId: number) => {
+  const reorderGearItemsInCategory = useCallback((items: GearItem[], sourceId: number, targetId: number, category: string) => {
     if (sourceId === targetId) {
       return items
     }
 
-    const sourceIndex = items.findIndex((item) => item.id === sourceId)
-    const targetIndex = items.findIndex((item) => item.id === targetId)
+    const categoryItems = items.filter((item) => item.category === category)
+    const sourceIndex = categoryItems.findIndex((item) => item.id === sourceId)
+    const targetIndex = categoryItems.findIndex((item) => item.id === targetId)
     if (sourceIndex < 0 || targetIndex < 0) {
       return items
     }
 
-    const next = [...items]
-    const [movedItem] = next.splice(sourceIndex, 1)
-    next.splice(targetIndex, 0, movedItem)
-    return next.map((item, index) => ({ ...item, sortOrder: (index + 1) * 10 }))
+    const nextCategoryItems = [...categoryItems]
+    const [movedItem] = nextCategoryItems.splice(sourceIndex, 1)
+    nextCategoryItems.splice(targetIndex, 0, movedItem)
+
+    let categoryIndex = 0
+    const merged = items.map((item) => {
+      if (item.category !== category) {
+        return item
+      }
+      const nextItem = nextCategoryItems[categoryIndex]
+      categoryIndex += 1
+      return nextItem
+    })
+
+    return merged.map((item, index) => ({ ...item, sortOrder: (index + 1) * 10 }))
+  }, [])
+
+  const reorderGearItemsByCategory = useCallback((items: GearItem[], sourceCategory: string, targetCategory: string) => {
+    if (sourceCategory === targetCategory) {
+      return items
+    }
+
+    const categories = Array.from(new Set(items.map((item) => item.category.trim()).filter((category) => category.length > 0)))
+    const sourceIndex = categories.indexOf(sourceCategory)
+    const targetIndex = categories.indexOf(targetCategory)
+    if (sourceIndex < 0 || targetIndex < 0) {
+      return items
+    }
+
+    const nextCategories = [...categories]
+    const [movedCategory] = nextCategories.splice(sourceIndex, 1)
+    nextCategories.splice(targetIndex, 0, movedCategory)
+
+    const itemsByCategory = new Map<string, GearItem[]>()
+    const uncategorizedItems: GearItem[] = []
+    for (const category of nextCategories) {
+      itemsByCategory.set(category, [])
+    }
+
+    for (const item of items) {
+      const category = item.category.trim()
+      if (!category || !itemsByCategory.has(category)) {
+        uncategorizedItems.push(item)
+        continue
+      }
+      itemsByCategory.get(category)?.push(item)
+    }
+
+    const merged: GearItem[] = []
+    for (const category of nextCategories) {
+      const groupedItems = itemsByCategory.get(category)
+      if (groupedItems && groupedItems.length > 0) {
+        merged.push(...groupedItems)
+      }
+    }
+    if (uncategorizedItems.length > 0) {
+      merged.push(...uncategorizedItems)
+    }
+
+    return merged.map((item, index) => ({ ...item, sortOrder: (index + 1) * 10 }))
   }, [])
 
   const handleGearDragStart = useCallback(
     (event: DragEvent<HTMLLIElement>, id: number) => {
-      if (!accessToken || isReordering || selectedCategory !== 'all') {
+      if (!accessToken || isReordering) {
+        event.preventDefault()
+        return
+      }
+      const sourceItem = gearItems.find((item) => item.id === id)
+      if (!sourceItem) {
+        event.preventDefault()
+        return
+      }
+      if (selectedCategory !== 'all' && sourceItem.category !== selectedCategory) {
         event.preventDefault()
         return
       }
@@ -972,7 +1181,7 @@ function App() {
       event.dataTransfer.effectAllowed = 'move'
       setDraggingGearId(id)
     },
-    [accessToken, isReordering, selectedCategory],
+    [accessToken, gearItems, isReordering, selectedCategory],
   )
 
   const handleGearDragOver = useCallback((event: DragEvent<HTMLLIElement>) => {
@@ -987,7 +1196,19 @@ function App() {
       }
 
       const previousItems = gearItems
-      const reorderedItems = reorderGearItems(previousItems, draggingGearId, targetId)
+      const sourceItem = previousItems.find((item) => item.id === draggingGearId)
+      const targetItem = previousItems.find((item) => item.id === targetId)
+      if (!sourceItem || !targetItem || sourceItem.category !== targetItem.category) {
+        setDraggingGearId(null)
+        setDragOverGearId(null)
+        return
+      }
+      if (selectedCategory !== 'all' && sourceItem.category !== selectedCategory) {
+        setDraggingGearId(null)
+        setDragOverGearId(null)
+        return
+      }
+      const reorderedItems = reorderGearItemsInCategory(previousItems, draggingGearId, targetId, sourceItem.category)
       setDraggingGearId(null)
       setDragOverGearId(null)
 
@@ -1013,7 +1234,63 @@ function App() {
         setIsReordering(false)
       }
     },
-    [accessToken, draggingGearId, gearItems, isReordering, reorderGearItems, requestWithAuth, showToast],
+    [accessToken, draggingGearId, gearItems, isReordering, reorderGearItemsInCategory, requestWithAuth, selectedCategory, showToast],
+  )
+
+  const handleCategoryDragStart = useCallback(
+    (event: DragEvent<HTMLDivElement>, category: string) => {
+      if (!isAdminEditing || isReordering) {
+        event.preventDefault()
+        return
+      }
+      const rect = event.currentTarget.getBoundingClientRect()
+      event.dataTransfer.setDragImage(event.currentTarget, rect.width / 2, rect.height / 2)
+      event.dataTransfer.setData('text/plain', category)
+      event.dataTransfer.effectAllowed = 'move'
+      setDraggingCategory(category)
+    },
+    [isAdminEditing, isReordering],
+  )
+
+  const handleCategoryDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }, [])
+
+  const handleCategoryDrop = useCallback(
+    async (targetCategory: string) => {
+      if (!accessToken || isReordering || !draggingCategory) {
+        return
+      }
+
+      const previousItems = gearItems
+      const reorderedItems = reorderGearItemsByCategory(previousItems, draggingCategory, targetCategory)
+      setDraggingCategory(null)
+      setDragOverCategory(null)
+
+      if (reorderedItems === previousItems) {
+        return
+      }
+
+      setGearItems(reorderedItems)
+      setIsReordering(true)
+
+      try {
+        await requestWithAuth('/api/admin/gear-items/reorder', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderedIds: reorderedItems.map((item) => item.id) }),
+        })
+        showToast('カテゴリ順を更新しました。', 'success')
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'カテゴリ並び替えの保存に失敗しました'
+        setGearItems(previousItems)
+        showToast(message, 'error')
+      } finally {
+        setIsReordering(false)
+      }
+    },
+    [accessToken, draggingCategory, gearItems, isReordering, reorderGearItemsByCategory, requestWithAuth, showToast],
   )
 
   const handleStartEditGearItem = useCallback((item: GearItem) => {
@@ -1063,6 +1340,8 @@ function App() {
     setIsRenamingCategory(false)
     setDraggingGearId(null)
     setDragOverGearId(null)
+    setDraggingCategory(null)
+    setDragOverCategory(null)
   }, [accessToken, isEditMode])
 
   const handleCloseEditDialog = useCallback(() => {
@@ -1326,7 +1605,16 @@ function App() {
     setGearImageIndexes((previous) => ({ ...previous, [item.id]: nextIndex }))
   }, [])
 
-  const canReorder = Boolean(isAdminEditing && selectedCategory === 'all')
+  const draggingGearCategory = useMemo(() => {
+    if (draggingGearId === null) {
+      return null
+    }
+    return gearItems.find((item) => item.id === draggingGearId)?.category ?? null
+  }, [draggingGearId, gearItems])
+
+  const canReorderCategories = Boolean(isAdminEditing && !isReordering)
+  const canReorderCards = Boolean(isAdminEditing && !isReordering)
+  const nextLanguage = language === 'ja' ? 'en' : 'ja'
 
   return (
     <main className="page">
@@ -1339,7 +1627,7 @@ function App() {
           onClick={() => setIsEditMode((prev) => !prev)}
         >
           {isEditMode ? <Pencil2Icon /> : <EyeOpenIcon />}
-          <span>{isEditMode ? '編集モード' : '閲覧モード'}</span>
+          <span>{isEditMode ? labels.modeEdit : labels.modeView}</span>
         </button>
       ) : null}
 
@@ -1384,8 +1672,8 @@ function App() {
               </div>
             ) : (
               <div className="twitch-offline">
-                <p className="twitch-offline-title">現在はオフラインです</p>
-                <p className="twitch-offline-text">次の配信まで少し待っててください。</p>
+                <p className="twitch-offline-title">{labels.offlineTitle}</p>
+                <p className="twitch-offline-text">{labels.offlineText}</p>
               </div>
             )}
           </div>
@@ -1403,9 +1691,9 @@ function App() {
 
       <section className="gear-zone" aria-label="setup">
         <div className="gear-header">
-          <h2 className="gear-heading">機材紹介</h2>
-          <p className="gear-description">配信と制作で使っている機材をまとめています。</p>
-          <p className="gear-note">リンクはアフィリエイトではありません。</p>
+          <h2 className="gear-heading">{labels.picksHeading}</h2>
+          <p className="gear-description">{labels.picksDescription}</p>
+          <p className="gear-note">{labels.affiliateNote}</p>
           {isAdminEditing ? (
             <button className="gear-add-button" type="button" onClick={handleOpenAddDialog}>
               <PlusIcon />
@@ -1419,16 +1707,31 @@ function App() {
             className={`gear-filter-chip${selectedCategory === 'all' ? ' is-active' : ''}`}
             onClick={() => setSelectedCategory('all')}
           >
-            すべて
+            {labels.allCategory}
           </button>
           {categoryOptions.map((category) => (
-            <div key={`filter-${category}`} className="gear-filter-chip-wrap">
+            <div
+              key={`filter-${category}`}
+              className={`gear-filter-chip-wrap${canReorderCategories ? ' is-draggable' : ''}${draggingCategory === category ? ' is-dragging' : ''}${dragOverCategory === category ? ' is-drop-target' : ''}`}
+              draggable={canReorderCategories}
+              onDragStart={(event) => handleCategoryDragStart(event, category)}
+              onDragOver={handleCategoryDragOver}
+              onDragEnter={() => setDragOverCategory(category)}
+              onDrop={() => {
+                void handleCategoryDrop(category)
+              }}
+              onDragEnd={() => {
+                setDraggingCategory(null)
+                setDragOverCategory(null)
+              }}
+            >
               <button
                 type="button"
                 className={`gear-filter-chip${selectedCategory === category ? ' is-active' : ''}`}
                 onClick={() => setSelectedCategory(category)}
+                draggable={false}
               >
-                {category}
+                {categoryDisplayMap.get(category) ?? category}
               </button>
               {isAdminEditing ? (
                 <button
@@ -1437,6 +1740,7 @@ function App() {
                   onClick={(event) => handleOpenRenameCategoryDialog(event, category)}
                   disabled={isRenamingCategory || isUpdating}
                   aria-label={`${category} のカテゴリ名を変更`}
+                  draggable={false}
                 >
                   <Pencil2Icon />
                 </button>
@@ -1444,10 +1748,13 @@ function App() {
             </div>
           ))}
         </div>
-        {isGearLoading ? <p className="gear-loading">機材情報を読み込み中...</p> : null}
+        {isGearLoading ? <p className="gear-loading">{labels.gearLoading}</p> : null}
 
         <ul className="gear-item-grid">
           {filteredGearItems.map((item) => {
+            const itemTitle = language === 'en' && item.titleEn ? item.titleEn : item.title
+            const itemCategory = language === 'en' && item.categoryEn ? item.categoryEn : item.category
+            const itemDescription = language === 'en' && item.descriptionEn ? item.descriptionEn : item.description
             const itemImageUrls =
               item.imageUrls.length > 0 ? item.imageUrls : item.imageUrl ? [item.imageUrl] : ['/gear/gaming-pc.jpg']
             const imageCount = itemImageUrls.length
@@ -1458,7 +1765,7 @@ function App() {
                 <img
                   className={`gear-item-photo${item.imageFit === 'contain' ? ' is-contain' : ''}`}
                   src={currentImageUrl}
-                  alt={`${item.title} の画像`}
+                  alt={language === 'en' ? `${itemTitle} image` : `${itemTitle} の画像`}
                   loading="lazy"
                   draggable={false}
                 />
@@ -1472,7 +1779,7 @@ function App() {
                         event.stopPropagation()
                       }}
                       onClick={(event) => handleSwitchGearImage(event, item, -1)}
-                      aria-label={`${item.title} の前の画像`}
+                      aria-label={language === 'en' ? `Previous image for ${itemTitle}` : `${itemTitle} の前の画像`}
                     >
                       ‹
                     </button>
@@ -1484,11 +1791,15 @@ function App() {
                         event.stopPropagation()
                       }}
                       onClick={(event) => handleSwitchGearImage(event, item, 1)}
-                      aria-label={`${item.title} の次の画像`}
+                      aria-label={language === 'en' ? `Next image for ${itemTitle}` : `${itemTitle} の次の画像`}
                     >
                       ›
                     </button>
-                    <div className="gear-image-dots" role="tablist" aria-label={`${item.title} の画像一覧`}>
+                    <div
+                      className="gear-image-dots"
+                      role="tablist"
+                      aria-label={language === 'en' ? `Image list for ${itemTitle}` : `${itemTitle} の画像一覧`}
+                    >
                       {itemImageUrls.map((_, index) => (
                         <button
                           key={`${item.id}-dot-${index}`}
@@ -1499,7 +1810,7 @@ function App() {
                             event.stopPropagation()
                           }}
                           onClick={(event) => handleSelectGearImage(event, item, index)}
-                          aria-label={`${index + 1}枚目の画像を表示`}
+                          aria-label={language === 'en' ? `Show image ${index + 1}` : `${index + 1}枚目の画像を表示`}
                           aria-current={index === imageIndex ? 'true' : undefined}
                         />
                       ))}
@@ -1512,8 +1823,8 @@ function App() {
             return (
               <li
               key={`${item.id}-${item.title}`}
-              className={`gear-item-card${canReorder ? ' is-admin' : ''}${draggingGearId === item.id ? ' is-dragging' : ''}${dragOverGearId === item.id ? ' is-drop-target' : ''}`}
-              draggable={canReorder}
+              className={`gear-item-card${canReorderCards ? ' is-admin' : ''}${draggingGearId === item.id ? ' is-dragging' : ''}${dragOverGearId === item.id ? ' is-drop-target' : ''}${draggingGearCategory && item.category !== draggingGearCategory ? ' is-category-muted' : ''}`}
+              draggable={canReorderCards}
               onDragStart={(event) => handleGearDragStart(event, item.id)}
               onDragOver={handleGearDragOver}
               onDragEnter={() => setDragOverGearId(item.id)}
@@ -1565,25 +1876,25 @@ function App() {
                     rel="noreferrer"
                     draggable={false}
                   >
-                    {item.title}
+                    {itemTitle}
                   </a>
                 ) : (
-                  <p className="gear-item-name">{item.title}</p>
+                  <p className="gear-item-name">{itemTitle}</p>
                 )}
-                <p className="gear-item-meta">{item.category}</p>
-                {item.description ? <p className="gear-item-description">{item.description}</p> : null}
+                <p className="gear-item-meta">{itemCategory}</p>
+                {itemDescription ? <p className="gear-item-description">{itemDescription}</p> : null}
               </div>
             </li>
             )
           })}
         </ul>
         {!isGearLoading && filteredGearItems.length < 1 ? (
-          <p className="gear-loading">選択中のカテゴリには機材がありません。</p>
+          <p className="gear-loading">{labels.noItems}</p>
         ) : null}
       </section>
 
       {isAdminEditing && isAddFormOpen ? (
-        <div className="auth-dialog-backdrop" role="presentation" onClick={handleCloseAddDialog}>
+        <div className="auth-dialog-backdrop" role="presentation">
           <section
             className="auth-dialog gear-add-dialog"
             role="dialog"
@@ -1609,6 +1920,7 @@ function App() {
                 <label className="admin-label">
                   URL
                   <input
+                    ref={addDialogUrlInputRef}
                     className="admin-input"
                     type="url"
                     value={newGearUrl}
@@ -1668,9 +1980,21 @@ function App() {
                     placeholder="カテゴリを入力（候補から選択可）"
                   />
                 </label>
-                <div className="selected-image-preview">
-                  {newGearImageUrls.length > 0 ? (
-                    <img src={newGearImageUrls[0]} alt="選択中の候補画像" loading="lazy" />
+                <div className={`selected-image-preview${newGearImageFit === 'contain' ? ' is-contain' : ''}`}>
+                  {newGearPrimaryImageUrl ? (
+                    <>
+                      <img
+                        src={newGearPrimaryImageUrl}
+                        alt="選択中の候補画像"
+                        loading="lazy"
+                        className={newGearImageFit === 'contain' ? 'is-contain' : ''}
+                        data-size-key={newGearPrimaryImageUrl}
+                        onLoad={handlePreviewImageLoad}
+                      />
+                      {getImageSizeLabel(newGearPrimaryImageUrl) ? (
+                        <span className="preview-image-size">{getImageSizeLabel(newGearPrimaryImageUrl)}</span>
+                      ) : null}
+                    </>
                   ) : (
                     <p className="selected-image-empty">画像は設定しません。</p>
                   )}
@@ -1682,17 +2006,28 @@ function App() {
                 </p>
                 {newGearImageCandidates.length > 0 ? (
                   <div className="image-candidate-grid">
-                    {newGearImageCandidates.map((candidateUrl, index) => (
-                      <button
-                        key={`${candidateUrl}-${index}`}
-                        className={`image-candidate-button${newGearImageUrlSet.has(candidateUrl) ? ' is-selected' : ''}`}
-                        type="button"
-                        onClick={() => handleToggleNewGearImageUrl(candidateUrl)}
-                        aria-label={`候補画像 ${index + 1} を${newGearImageUrlSet.has(candidateUrl) ? '解除' : '選択'}`}
-                      >
-                        <img src={candidateUrl} alt={`候補画像 ${index + 1}`} loading="lazy" />
-                      </button>
-                    ))}
+                    {newGearImageCandidates.map((candidateUrl, index) => {
+                      const sizeLabel = getImageSizeLabel(candidateUrl)
+                      return (
+                        <button
+                          key={`${candidateUrl}-${index}`}
+                          className={`image-candidate-button${newGearImageUrlSet.has(candidateUrl) ? ' is-selected' : ''}`}
+                          type="button"
+                          onClick={() => handleToggleNewGearImageUrl(candidateUrl)}
+                          aria-label={`候補画像 ${index + 1} を${newGearImageUrlSet.has(candidateUrl) ? '解除' : '選択'}`}
+                        >
+                          <img
+                            src={candidateUrl}
+                            alt={`候補画像 ${index + 1}`}
+                            loading="lazy"
+                            className={newGearImageFit === 'contain' ? 'is-contain' : ''}
+                            data-size-key={candidateUrl}
+                            onLoad={handlePreviewImageLoad}
+                          />
+                          {sizeLabel ? <span className="preview-image-size">{sizeLabel}</span> : null}
+                        </button>
+                      )
+                    })}
                   </div>
                 ) : null}
                 <button
@@ -1809,17 +2144,28 @@ function App() {
                 </div>
                 {editImageCandidates.length > 0 ? (
                   <div className="image-candidate-grid">
-                    {editImageCandidates.map((candidateUrl, index) => (
-                      <button
-                        key={`${candidateUrl}-${index}`}
-                        className={`image-candidate-button${editImageUrlSet.has(candidateUrl) ? ' is-selected' : ''}`}
-                        type="button"
-                        onClick={() => handleToggleEditImageUrl(candidateUrl)}
-                        aria-label={`候補画像 ${index + 1} を${editImageUrlSet.has(candidateUrl) ? '解除' : '選択'}`}
-                      >
-                        <img src={candidateUrl} alt={`候補画像 ${index + 1}`} loading="lazy" />
-                      </button>
-                    ))}
+                    {editImageCandidates.map((candidateUrl, index) => {
+                      const sizeLabel = getImageSizeLabel(candidateUrl)
+                      return (
+                        <button
+                          key={`${candidateUrl}-${index}`}
+                          className={`image-candidate-button${editImageUrlSet.has(candidateUrl) ? ' is-selected' : ''}`}
+                          type="button"
+                          onClick={() => handleToggleEditImageUrl(candidateUrl)}
+                          aria-label={`候補画像 ${index + 1} を${editImageUrlSet.has(candidateUrl) ? '解除' : '選択'}`}
+                        >
+                          <img
+                            src={candidateUrl}
+                            alt={`候補画像 ${index + 1}`}
+                            loading="lazy"
+                            className={editImageFit === 'contain' ? 'is-contain' : ''}
+                            data-size-key={candidateUrl}
+                            onLoad={handlePreviewImageLoad}
+                          />
+                          {sizeLabel ? <span className="preview-image-size">{sizeLabel}</span> : null}
+                        </button>
+                      )
+                    })}
                   </div>
                 ) : null}
                 <div className="edit-image-controls">
@@ -1859,12 +2205,20 @@ function App() {
                       >
                         <button
                           type="button"
-                          className="edit-image-thumb"
+                          className={`edit-image-thumb${editImageFit === 'contain' ? ' is-contain' : ''}`}
                           onClick={() => handlePromoteEditImage(index)}
                           disabled={index === 0 || isUpdating}
                           aria-label={index === 0 ? 'メイン画像' : `${index + 1}枚目をメイン画像にする`}
                         >
-                          <img src={url} alt={`編集画像 ${index + 1}`} loading="lazy" />
+                          <img
+                            src={url}
+                            alt={`編集画像 ${index + 1}`}
+                            loading="lazy"
+                            className={editImageFit === 'contain' ? 'is-contain' : ''}
+                            data-size-key={url}
+                            onLoad={handlePreviewImageLoad}
+                          />
+                          {getImageSizeLabel(url) ? <span className="preview-image-size">{getImageSizeLabel(url)}</span> : null}
                         </button>
                         <div className="edit-image-actions">
                           <button
@@ -2065,6 +2419,19 @@ function App() {
           {toast.message}
         </div>
       ) : null}
+
+      <button
+        className="language-toggle-button"
+        type="button"
+        aria-label={labels.languageAria}
+        title={labels.languageAria}
+        onClick={() => setLanguage(nextLanguage)}
+      >
+        <GlobeIcon />
+        <span className="language-toggle-code" aria-hidden="true">
+          {language.toUpperCase()}
+        </span>
+      </button>
 
       <footer className="copyright">Copyright © {new Date().getFullYear()} ichi0g0y</footer>
     </main>

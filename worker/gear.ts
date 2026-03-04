@@ -4,12 +4,15 @@ import { errorResponse, jsonResponse, nowSeconds, readJsonBody } from './utils'
 interface GearRow {
   id: number
   title: string
+  title_en: string | null
   category: string
+  category_en: string | null
   image_url: string | null
   image_urls: string | null
   image_fit: 'cover' | 'contain'
   link_url: string | null
   description: string | null
+  description_en: string | null
   sort_order: number
   created_at: number
   updated_at: number
@@ -33,18 +36,127 @@ const HTML_ENTITY_MAP: Record<string, string> = {
 }
 
 const PREVIEW_FETCH_TIMEOUT_MS = 20_000
+const OPENAI_TRANSLATE_TIMEOUT_MS = 15_000
+const DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini'
+
+interface EnglishTranslation {
+  titleEn: string | null
+  categoryEn: string | null
+  descriptionEn: string | null
+}
+
+function normalizeTranslatedField(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+async function translateToEnglishWithOpenAI(
+  source: { title: string; category: string; description: string | null },
+  env: Env,
+): Promise<EnglishTranslation> {
+  const apiKey = env.OPENAI_API_KEY?.trim()
+  if (!apiKey) {
+    return {
+      titleEn: null,
+      categoryEn: null,
+      descriptionEn: null,
+    }
+  }
+
+  const model = env.OPENAI_MODEL?.trim() || DEFAULT_OPENAI_MODEL
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), OPENAI_TRANSLATE_TIMEOUT_MS)
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Translate Japanese e-commerce-like item fields into natural English. Return only JSON with keys: titleEn, categoryEn, descriptionEn. Keep product names and model numbers unchanged as much as possible.',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              title: source.title,
+              category: source.category,
+              description: source.description,
+            }),
+          },
+        ],
+      }),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      return {
+        titleEn: null,
+        categoryEn: null,
+        descriptionEn: null,
+      }
+    }
+
+    const data = (await response.json().catch(() => null)) as
+      | {
+          choices?: Array<{
+            message?: {
+              content?: string | null
+            }
+          }>
+        }
+      | null
+    const content = data?.choices?.[0]?.message?.content
+    if (!content) {
+      return {
+        titleEn: null,
+        categoryEn: null,
+        descriptionEn: null,
+      }
+    }
+
+    const parsed = JSON.parse(content) as Record<string, unknown>
+    return {
+      titleEn: normalizeTranslatedField(parsed.titleEn),
+      categoryEn: normalizeTranslatedField(parsed.categoryEn),
+      descriptionEn: normalizeTranslatedField(parsed.descriptionEn),
+    }
+  } catch {
+    return {
+      titleEn: null,
+      categoryEn: null,
+      descriptionEn: null,
+    }
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
 function mapGearRow(row: GearRow): GearItem {
   const imageUrls = parseStoredImageUrls(row.image_urls, row.image_url)
   return {
     id: row.id,
     title: row.title,
+    titleEn: row.title_en,
     category: row.category,
+    categoryEn: row.category_en,
     imageUrl: imageUrls[0] ?? null,
     imageUrls,
     imageFit: row.image_fit === 'cover' ? 'cover' : 'contain',
     linkUrl: row.link_url,
     description: row.description,
+    descriptionEn: row.description_en,
     sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -497,7 +609,7 @@ export async function fetchLinkPreview(url: string): Promise<LinkPreview> {
 export async function handleListGearItems(env: Env) {
   const rows = await env.DB.prepare(
     `
-      SELECT id, title, category, image_url, image_urls, image_fit, link_url, description, sort_order, created_at, updated_at
+      SELECT id, title, title_en, category, category_en, image_url, image_urls, image_fit, link_url, description, description_en, sort_order, created_at, updated_at
       FROM gear_items
       ORDER BY sort_order ASC, id ASC
     `,
@@ -560,6 +672,7 @@ export async function handleCreateGearFromUrl(request: Request, env: Env) {
   const category = requestedCategory || '外部リンク'
   const title = requestedTitle || preview.title || new URL(preview.url).hostname
   const description = requestedDescription || preview.description
+  const canTranslate = Boolean(env.OPENAI_API_KEY?.trim())
   const previewImageUrls = normalizeImageUrls(preview.imageCandidates.length > 0 ? preview.imageCandidates : [preview.imageUrl ?? ''])
   const imageUrls = requestedImages.imageUrls ?? previewImageUrls
   const imageUrl = imageUrls[0] ?? null
@@ -567,7 +680,7 @@ export async function handleCreateGearFromUrl(request: Request, env: Env) {
 
   const existing = await env.DB.prepare(
     `
-      SELECT id, title, category, image_url, image_urls, image_fit, link_url, description, sort_order, created_at, updated_at
+      SELECT id, title, title_en, category, category_en, image_url, image_urls, image_fit, link_url, description, description_en, sort_order, created_at, updated_at
       FROM gear_items
       WHERE link_url = ?1 OR link_url = ?2
       ORDER BY id DESC
@@ -579,16 +692,32 @@ export async function handleCreateGearFromUrl(request: Request, env: Env) {
 
   if (existing) {
     const nextCategory = requestedCategory || existing.category
+    const translatedForExisting = canTranslate
+      ? await translateToEnglishWithOpenAI({ title, category: nextCategory, description }, env)
+      : null
     const nextImageFit = requestedImageFit ?? existing.image_fit
     const updated = await env.DB.prepare(
       `
         UPDATE gear_items
-        SET title = ?1, category = ?2, image_url = ?3, image_urls = ?4, image_fit = ?5, link_url = ?6, description = ?7, updated_at = ?8
-        WHERE id = ?9
-        RETURNING id, title, category, image_url, image_urls, image_fit, link_url, description, sort_order, created_at, updated_at
+        SET title = ?1, title_en = ?2, category = ?3, category_en = ?4, image_url = ?5, image_urls = ?6, image_fit = ?7, link_url = ?8, description = ?9, description_en = ?10, updated_at = ?11
+        WHERE id = ?12
+        RETURNING id, title, title_en, category, category_en, image_url, image_urls, image_fit, link_url, description, description_en, sort_order, created_at, updated_at
       `,
     )
-      .bind(title, nextCategory, imageUrl, JSON.stringify(imageUrls), nextImageFit, preview.url, description, now, existing.id)
+      .bind(
+        title,
+        translatedForExisting?.titleEn ?? existing.title_en,
+        nextCategory,
+        translatedForExisting?.categoryEn ?? existing.category_en,
+        imageUrl,
+        JSON.stringify(imageUrls),
+        nextImageFit,
+        preview.url,
+        description,
+        translatedForExisting?.descriptionEn ?? existing.description_en,
+        now,
+        existing.id,
+      )
       .first<GearRow>()
 
     if (!updated) {
@@ -602,15 +731,30 @@ export async function handleCreateGearFromUrl(request: Request, env: Env) {
     max_sort: number
   }>()
   const nextSort = (sortRow?.max_sort ?? 0) + 10
+  const translatedForInsert = canTranslate ? await translateToEnglishWithOpenAI({ title, category, description }, env) : null
 
   const inserted = await env.DB.prepare(
     `
-      INSERT INTO gear_items (title, category, image_url, image_urls, image_fit, link_url, description, sort_order, created_at, updated_at)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-      RETURNING id, title, category, image_url, image_urls, image_fit, link_url, description, sort_order, created_at, updated_at
+      INSERT INTO gear_items (title, title_en, category, category_en, image_url, image_urls, image_fit, link_url, description, description_en, sort_order, created_at, updated_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+      RETURNING id, title, title_en, category, category_en, image_url, image_urls, image_fit, link_url, description, description_en, sort_order, created_at, updated_at
     `,
   )
-    .bind(title, category, imageUrl, JSON.stringify(imageUrls), imageFit, preview.url, description, nextSort, now, now)
+    .bind(
+      title,
+      translatedForInsert?.titleEn ?? null,
+      category,
+      translatedForInsert?.categoryEn ?? null,
+      imageUrl,
+      JSON.stringify(imageUrls),
+      imageFit,
+      preview.url,
+      description,
+      translatedForInsert?.descriptionEn ?? null,
+      nextSort,
+      now,
+      now,
+    )
     .first<GearRow>()
 
   if (!inserted) {
@@ -638,7 +782,7 @@ export async function handleUpdateGearItem(request: Request, env: Env) {
   }>(request)
   const existing = await env.DB.prepare(
     `
-      SELECT id, title, category, image_url, image_urls, image_fit, link_url, description, sort_order, created_at, updated_at
+      SELECT id, title, title_en, category, category_en, image_url, image_urls, image_fit, link_url, description, description_en, sort_order, created_at, updated_at
       FROM gear_items
       WHERE id = ?1
       LIMIT 1
@@ -675,17 +819,40 @@ export async function handleUpdateGearItem(request: Request, env: Env) {
   const nextImageUrls = resolvedImageUrls.imageUrls ?? parseStoredImageUrls(existing.image_urls, existing.image_url)
   const nextImageUrl = nextImageUrls[0] ?? null
   const nextImageFit = body?.imageFit === undefined ? existing.image_fit : normalizeImageFit(body.imageFit)
+  const canTranslate = Boolean(env.OPENAI_API_KEY?.trim())
+  const translated = canTranslate
+    ? await translateToEnglishWithOpenAI(
+        {
+          title: nextTitle,
+          category: nextCategory,
+          description: nextDescription,
+        },
+        env,
+      )
+    : null
 
   const now = nowSeconds()
   const updated = await env.DB.prepare(
     `
       UPDATE gear_items
-      SET title = ?1, category = ?2, description = ?3, image_url = ?4, image_urls = ?5, image_fit = ?6, updated_at = ?7
-      WHERE id = ?8
-      RETURNING id, title, category, image_url, image_urls, image_fit, link_url, description, sort_order, created_at, updated_at
+      SET title = ?1, title_en = ?2, category = ?3, category_en = ?4, description = ?5, description_en = ?6, image_url = ?7, image_urls = ?8, image_fit = ?9, updated_at = ?10
+      WHERE id = ?11
+      RETURNING id, title, title_en, category, category_en, image_url, image_urls, image_fit, link_url, description, description_en, sort_order, created_at, updated_at
     `,
   )
-    .bind(nextTitle, nextCategory, nextDescription, nextImageUrl, JSON.stringify(nextImageUrls), nextImageFit, now, id)
+    .bind(
+      nextTitle,
+      translated?.titleEn ?? existing.title_en,
+      nextCategory,
+      translated?.categoryEn ?? existing.category_en,
+      nextDescription,
+      translated?.descriptionEn ?? existing.description_en,
+      nextImageUrl,
+      JSON.stringify(nextImageUrls),
+      nextImageFit,
+      now,
+      id,
+    )
     .first<GearRow>()
 
   if (!updated) {
@@ -712,10 +879,21 @@ export async function handleRenameGearCategory(request: Request, env: Env) {
     return jsonResponse({ ok: true, oldCategory, newCategory, updatedCount: 0 })
   }
 
+  const canTranslate = Boolean(env.OPENAI_API_KEY?.trim())
+  const translated = canTranslate
+    ? await translateToEnglishWithOpenAI(
+        {
+          title: newCategory,
+          category: newCategory,
+          description: null,
+        },
+        env,
+      )
+    : null
   const now = nowSeconds()
   const result = await env.DB
-    .prepare('UPDATE gear_items SET category = ?1, updated_at = ?2 WHERE category = ?3')
-    .bind(newCategory, now, oldCategory)
+    .prepare('UPDATE gear_items SET category = ?1, category_en = ?2, updated_at = ?3 WHERE category = ?4')
+    .bind(newCategory, translated?.categoryEn ?? null, now, oldCategory)
     .run()
   const updatedCount = result.meta.changes ?? 0
 

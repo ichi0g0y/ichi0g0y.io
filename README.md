@@ -11,6 +11,8 @@ cp .dev.vars.example .dev.vars
 
 GitHub OAuth App を作成し、Authorization callback URL に `http://localhost:5173/api/auth/github/callback` を設定してください。
 
+翻訳を有効にする場合は `.dev.vars` に `OPENAI_API_KEY`（必要に応じて `OPENAI_MODEL`）を設定してください。
+
 ## 開発サーバー
 
 ```bash
