@@ -1,0 +1,11 @@
+@import url('https://fonts.googleapis.com/css2?family=Prompt:wght@700&family=Space+Grotesk:wght@400;500;700&family=Zen+Maru+Gothic:wght@700&display=swap');
+@import 'tailwindcss';
+
+@import './styles/base.css';
+@import './styles/hero.css';
+@import './styles/gear.css';
+@import './styles/gear-cards.css';
+@import './styles/admin.css';
+@import './styles/dialogs.css';
+@import './styles/widgets.css';
+@import './styles/responsive.css';

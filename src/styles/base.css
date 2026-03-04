@@ -1,0 +1,20 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #efefef;
+  color: #111111;
+  font-family: 'Prompt', 'Zen Maru Gothic', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+.page {
+  min-height: 100dvh;
+  padding: 0 0 3rem;
+}
