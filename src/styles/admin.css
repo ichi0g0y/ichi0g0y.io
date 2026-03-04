@@ -42,6 +42,13 @@
   color: #475569;
 }
 
+.admin-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 .admin-input {
   width: 100%;
   margin-top: 0.2rem;
@@ -233,6 +240,13 @@
   border-color: #be123c;
   background: #be123c;
   color: #fff1f2;
+}
+
+.admin-inline-button {
+  align-self: auto;
+  padding: 0.22rem 0.5rem;
+  font-size: 0.74rem;
+  line-height: 1.25;
 }
 
 .admin-button:hover {

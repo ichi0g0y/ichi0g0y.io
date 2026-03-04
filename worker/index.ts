@@ -6,8 +6,10 @@ import {
   handlePreview,
   handleRenameGearCategory,
   handleReorderGearItems,
+  handleTranslateGearDescription,
   handleUpdateGearItem,
 } from './gear'
+import { handleGetImageById } from './image-store'
 import type { Env } from './types'
 import { appendCorsHeaders, errorResponse, preflightResponse } from './utils'
 
@@ -44,6 +46,14 @@ async function routeApi(request: Request, env: Env) {
     return handlePreview(request)
   }
 
+  if ((method === 'GET' || method === 'HEAD') && pathname.startsWith('/api/images/')) {
+    const response = await handleGetImageById(request, env)
+    if (method === 'HEAD') {
+      return new Response(null, { status: response.status, headers: response.headers })
+    }
+    return response
+  }
+
   if (method === 'GET' && pathname === '/api/gear-items') {
     return handleListGearItems(env)
   }
@@ -54,6 +64,14 @@ async function routeApi(request: Request, env: Env) {
       return errorResponse('認証が必要です', 401)
     }
     return handleCreateGearFromUrl(request, env)
+  }
+
+  if (method === 'POST' && pathname === '/api/admin/gear-items/translate-description') {
+    const auth = await requireAuth(request, env)
+    if (!auth) {
+      return errorResponse('認証が必要です', 401)
+    }
+    return handleTranslateGearDescription(request, env)
   }
 
   if (method === 'PATCH' && pathname === '/api/admin/gear-items/reorder') {
