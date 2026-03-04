@@ -39,6 +39,25 @@ task worker-dev
 task d1-migrate-local
 ```
 
+## 環境データの保存/復元
+
+Worktree 間で開発用データを引き継ぐため、`~/.envs/<repo名>/` に保存/復元できます。
+
+```bash
+task env:save
+task env:restore
+```
+
+対象:
+
+- `.envrc`
+- `.dev.vars`
+- `.dev.vars.example`
+- `env/`
+- `.wrangler/state/`（ローカルD1など）
+
+`conductor.json` の `setup` では復元 (`env:restore` 相当) を自動実行します。
+
 ## ビルド
 
 ```bash

@@ -68,3 +68,13 @@ tasks:
       - build
     cmds:
       - bun run preview
+
+  env:save:
+    desc: Worktreeの環境データを ~/.envs に保存
+    cmds:
+      - bash ./scripts/sync_workspace_env.sh push
+
+  env:restore:
+    desc: ~/.envs の環境データを Worktree に復元
+    cmds:
+      - bash ./scripts/sync_workspace_env.sh pull
