@@ -132,9 +132,12 @@ function App() {
   const [isReordering, setIsReordering] = useState(false)
   const [editingGearId, setEditingGearId] = useState<number | null>(null)
   const [editTitle, setEditTitle] = useState('')
+  const [editTitleEn, setEditTitleEn] = useState('')
+  const [editOriginalTitleEn, setEditOriginalTitleEn] = useState('')
   const [editDescription, setEditDescription] = useState('')
+  const [editDescriptionEn, setEditDescriptionEn] = useState('')
+  const [editOriginalDescriptionEn, setEditOriginalDescriptionEn] = useState('')
   const [editCategory, setEditCategory] = useState('')
-  const [editOriginalCategory, setEditOriginalCategory] = useState('')
   const [editImageUrls, setEditImageUrls] = useState<string[]>([])
   const [editImageUrlInput, setEditImageUrlInput] = useState('')
   const [editDraggingImageIndex, setEditDraggingImageIndex] = useState<number | null>(null)
@@ -148,6 +151,7 @@ function App() {
   const [gearImageIndexes, setGearImageIndexes] = useState<Record<number, number>>({})
   const [renameCategoryTarget, setRenameCategoryTarget] = useState<string | null>(null)
   const [renameCategoryValue, setRenameCategoryValue] = useState('')
+  const [renameCategoryValueEn, setRenameCategoryValueEn] = useState('')
   const [isRenamingCategory, setIsRenamingCategory] = useState(false)
   const [imageSizesByUrl, setImageSizesByUrl] = useState<Record<string, ImageSize>>({})
   const addDialogUrlInputRef = useRef<HTMLInputElement | null>(null)
@@ -167,6 +171,26 @@ function App() {
   const categoryOptions = useMemo(() => {
     return Array.from(new Set(gearItems.map((item) => item.category.trim()).filter((category) => category.length > 0)))
   }, [gearItems])
+  const categoryEnByCategory = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of gearItems) {
+      const jaCategory = item.category.trim()
+      const enCategory = item.categoryEn?.trim() ?? ''
+      if (!jaCategory || !enCategory || map.has(jaCategory)) {
+        continue
+      }
+      map.set(jaCategory, enCategory)
+    }
+    return map
+  }, [gearItems])
+  const editCategoryDisplayOptions = useMemo(
+    () =>
+      categoryOptions.map((category) => ({
+        value: category,
+        label: activeLanguage === 'en' ? categoryEnByCategory.get(category) ?? category : category,
+      })),
+    [activeLanguage, categoryEnByCategory, categoryOptions],
+  )
 
   const categoryDisplayMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -441,9 +465,12 @@ function App() {
       setEditingGearId(null)
       setDeleteConfirmTarget(null)
       setEditTitle('')
+      setEditTitleEn('')
+      setEditOriginalTitleEn('')
       setEditDescription('')
+      setEditDescriptionEn('')
+      setEditOriginalDescriptionEn('')
       setEditCategory('')
-      setEditOriginalCategory('')
       setEditImageUrls([])
       setEditImageUrlInput('')
       setEditDraggingImageIndex(null)
@@ -454,6 +481,7 @@ function App() {
       setEditImageFit('contain')
       setRenameCategoryTarget(null)
       setRenameCategoryValue('')
+      setRenameCategoryValueEn('')
       setIsRenamingCategory(false)
       setSelectedCategory('all')
       setAuthMessage('ログアウトしました。')
@@ -466,9 +494,12 @@ function App() {
   const openEditGearItem = useCallback((item: GearItem) => {
     setEditingGearId(item.id)
     setEditTitle(item.title)
+    setEditTitleEn(item.titleEn ?? '')
+    setEditOriginalTitleEn(item.titleEn ?? '')
     setEditDescription(item.description ?? '')
+    setEditDescriptionEn(item.descriptionEn ?? '')
+    setEditOriginalDescriptionEn(item.descriptionEn ?? '')
     setEditCategory(item.category)
-    setEditOriginalCategory(item.category)
     setEditImageUrls(normalizeImageUrls(item.imageUrls, item.imageUrl))
     setEditImageUrlInput('')
     setEditDraggingImageIndex(null)
@@ -507,7 +538,8 @@ function App() {
     event.stopPropagation()
     setRenameCategoryTarget(category)
     setRenameCategoryValue(category)
-  }, [])
+    setRenameCategoryValueEn(categoryEnByCategory.get(category) ?? '')
+  }, [categoryEnByCategory])
 
   const handleCloseRenameCategoryDialog = useCallback(() => {
     if (isRenamingCategory) {
@@ -515,6 +547,7 @@ function App() {
     }
     setRenameCategoryTarget(null)
     setRenameCategoryValue('')
+    setRenameCategoryValueEn('')
   }, [isRenamingCategory])
 
   const handleSubmitRenameCategory = useCallback(
@@ -526,12 +559,13 @@ function App() {
 
       const oldCategory = renameCategoryTarget.trim()
       const newCategory = renameCategoryValue.trim()
+      const newCategoryEn = renameCategoryValueEn.trim()
       if (!newCategory) {
         showToast('変更後カテゴリ名を入力してください', 'error')
         return
       }
 
-      if (oldCategory === newCategory) {
+      if (oldCategory === newCategory && (categoryEnByCategory.get(oldCategory) ?? '') === newCategoryEn) {
         handleCloseRenameCategoryDialog()
         return
       }
@@ -541,15 +575,20 @@ function App() {
         const data = await requestWithAuth('/api/admin/gear-categories/rename', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ oldCategory, newCategory }),
+          body: JSON.stringify({ oldCategory, newCategory, newCategoryEn }),
         })
         const updatedCount = typeof data.updatedCount === 'number' ? data.updatedCount : null
-        const newCategoryEn = typeof data.newCategoryEn === 'string' ? data.newCategoryEn : null
+        const renamedCategoryEn =
+          typeof data.newCategoryEn === 'string'
+            ? data.newCategoryEn
+            : data.newCategoryEn === null
+              ? null
+              : newCategoryEn || null
         setGearItems((previous) =>
           sortGearItems(
             previous.map((entry) =>
               entry.category === oldCategory
-                ? { ...entry, category: newCategory, ...(newCategoryEn != null ? { categoryEn: newCategoryEn } : {}) }
+                ? { ...entry, category: newCategory, categoryEn: renamedCategoryEn }
                 : entry,
             ),
           ),
@@ -557,6 +596,7 @@ function App() {
         setSelectedCategory((previous) => (previous === oldCategory ? newCategory : previous))
         setRenameCategoryTarget(null)
         setRenameCategoryValue('')
+        setRenameCategoryValueEn('')
         showToast(updatedCount === 0 ? '対象カテゴリは見つかりませんでした。' : 'カテゴリ名を変更しました。', 'success')
       } catch (error) {
         const message = error instanceof Error ? error.message : 'カテゴリ名の変更に失敗しました'
@@ -565,7 +605,16 @@ function App() {
         setIsRenamingCategory(false)
       }
     },
-    [handleCloseRenameCategoryDialog, renameCategoryTarget, renameCategoryValue, requestWithAuth, showToast, sortGearItems],
+    [
+      categoryEnByCategory,
+      handleCloseRenameCategoryDialog,
+      renameCategoryTarget,
+      renameCategoryValue,
+      renameCategoryValueEn,
+      requestWithAuth,
+      showToast,
+      sortGearItems,
+    ],
   )
 
   const handleLoadPreviewForAddDialog = useCallback(
@@ -715,9 +764,12 @@ function App() {
       if (editingGearId === target.id) {
         setEditingGearId(null)
         setEditTitle('')
+        setEditTitleEn('')
+        setEditOriginalTitleEn('')
         setEditDescription('')
+        setEditDescriptionEn('')
+        setEditOriginalDescriptionEn('')
         setEditCategory('')
-        setEditOriginalCategory('')
         setEditImageUrls([])
         setEditImageUrlInput('')
         setEditDraggingImageIndex(null)
@@ -952,9 +1004,12 @@ function App() {
   const handleCancelEdit = useCallback(() => {
     setEditingGearId(null)
     setEditTitle('')
+    setEditTitleEn('')
+    setEditOriginalTitleEn('')
     setEditDescription('')
+    setEditDescriptionEn('')
+    setEditOriginalDescriptionEn('')
     setEditCategory('')
-    setEditOriginalCategory('')
     setEditImageUrls([])
     setEditImageUrlInput('')
     setEditDraggingImageIndex(null)
@@ -976,9 +1031,12 @@ function App() {
     setDeleteConfirmTarget(null)
     setEditingGearId(null)
     setEditTitle('')
+    setEditTitleEn('')
+    setEditOriginalTitleEn('')
     setEditDescription('')
+    setEditDescriptionEn('')
+    setEditOriginalDescriptionEn('')
     setEditCategory('')
-    setEditOriginalCategory('')
     setEditImageUrls([])
     setEditImageUrlInput('')
     setEditDraggingImageIndex(null)
@@ -989,6 +1047,7 @@ function App() {
     setEditImageFit('contain')
     setRenameCategoryTarget(null)
     setRenameCategoryValue('')
+    setRenameCategoryValueEn('')
     setIsRenamingCategory(false)
     setDraggingGearId(null)
     setDragOverGearId(null)
@@ -1015,64 +1074,69 @@ function App() {
         showToast('タイトルを入力してください', 'error')
         return
       }
-
+      const nextTitleEn = editTitleEn.trim()
+      const oldTitleEn = editOriginalTitleEn.trim()
       const nextCategory = editCategory.trim()
-      const oldCategory = editOriginalCategory.trim()
-      const shouldRenameCategoryGlobally =
-        oldCategory.length > 0 && nextCategory.length > 0 && oldCategory !== nextCategory
+      if (!nextCategory) {
+        showToast('カテゴリを入力してください', 'error')
+        return
+      }
+      const nextDescriptionEn = editDescriptionEn.trim()
+      const oldDescriptionEn = editOriginalDescriptionEn.trim()
+      const shouldUpdateTitleEn = nextTitleEn !== oldTitleEn
+      const shouldUpdateDescriptionEn = nextDescriptionEn !== oldDescriptionEn
       const nextImageUrls = editImageUrls
+      const selectedCategoryEn = categoryEnByCategory.get(nextCategory) ?? ''
 
       setIsUpdating(true)
 
       try {
-        let renameNewCategoryEn: string | null = null
-        if (shouldRenameCategoryGlobally) {
-          const renameData = await requestWithAuth('/api/admin/gear-categories/rename', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              oldCategory,
-              newCategory: nextCategory,
-            }),
-          })
-          renameNewCategoryEn = typeof renameData.newCategoryEn === 'string' ? renameData.newCategoryEn : null
+        const updatePayload: {
+          title: string
+          description: string
+          category: string
+          imageUrls: string[]
+          imageFit: GearItem['imageFit']
+          categoryEn: string
+          titleEn?: string
+          descriptionEn?: string
+        } = {
+          title: nextTitle,
+          description: editDescription,
+          category: nextCategory,
+          imageUrls: nextImageUrls,
+          imageFit: editImageFit,
+          categoryEn: selectedCategoryEn,
+        }
+        if (shouldUpdateTitleEn) {
+          updatePayload.titleEn = nextTitleEn
+        }
+        if (shouldUpdateDescriptionEn) {
+          updatePayload.descriptionEn = nextDescriptionEn
         }
 
         const data = await requestWithAuth(`/api/admin/gear-items/${editingGearId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: nextTitle,
-            description: editDescription,
-            category: nextCategory,
-            imageUrls: nextImageUrls,
-            imageFit: editImageFit,
-          }),
+          body: JSON.stringify(updatePayload),
         })
         const updatedItem = (data.item as GearItem | undefined) ?? null
         if (!updatedItem) {
           throw new Error('カード更新に失敗しました')
         }
-        setGearItems((previous) => {
-          const renamedItems = shouldRenameCategoryGlobally
-            ? previous.map((entry) =>
-                entry.category === oldCategory
-                  ? { ...entry, category: nextCategory, ...(renameNewCategoryEn != null ? { categoryEn: renameNewCategoryEn } : {}) }
-                  : entry,
-              )
-            : previous
-
-          return sortGearItems(
-            renamedItems.map((entry) =>
-              entry.id === updatedItem.id ? normalizeGearItem({ ...entry, ...updatedItem }) : entry,
-            ),
-          )
-        })
+        setGearItems((previous) =>
+          sortGearItems(
+            previous.map((entry) => (entry.id === updatedItem.id ? normalizeGearItem({ ...entry, ...updatedItem }) : entry)),
+          ),
+        )
         setEditingGearId(null)
         setEditTitle('')
+        setEditTitleEn('')
+        setEditOriginalTitleEn('')
         setEditDescription('')
+        setEditDescriptionEn('')
+        setEditOriginalDescriptionEn('')
         setEditCategory('')
-        setEditOriginalCategory('')
         setEditImageUrls([])
         setEditImageUrlInput('')
         setEditDraggingImageIndex(null)
@@ -1081,7 +1145,7 @@ function App() {
         setEditImageCandidates([])
         setIsFetchingEditPreview(false)
         setEditImageFit('contain')
-        showToast(shouldRenameCategoryGlobally ? 'カードを更新し、カテゴリ名を一括変更しました。' : 'カードを更新しました。', 'success')
+        showToast('カードを更新しました。', 'success')
       } catch (error) {
         const message = error instanceof Error ? error.message : 'カード更新に失敗しました'
         showToast(message, 'error')
@@ -1092,11 +1156,15 @@ function App() {
     [
       editCategory,
       editDescription,
+      editDescriptionEn,
       editImageUrls,
       editImageFit,
-      editOriginalCategory,
+      editOriginalDescriptionEn,
+      editOriginalTitleEn,
       editTitle,
+      editTitleEn,
       editingGearId,
+      categoryEnByCategory,
       requestWithAuth,
       showToast,
       sortGearItems,
@@ -1632,8 +1700,12 @@ function App() {
       {isAdminEditing && editingGearId ? (
         <EditGearDialog
           editTitle={editTitle}
+          editTitleEn={editTitleEn}
           editDescription={editDescription}
+          editDescriptionEn={editDescriptionEn}
           editCategory={editCategory}
+          editCategoryLabel={activeLanguage === 'en' ? categoryEnByCategory.get(editCategory) ?? editCategory : editCategory}
+          categoryDisplayOptions={editCategoryDisplayOptions}
           editImageUrls={editImageUrls}
           editImageUrlInput={editImageUrlInput}
           editImageCandidates={editImageCandidates}
@@ -1642,14 +1714,15 @@ function App() {
           editPreviewUrl={editPreviewUrl}
           editDraggingImageIndex={editDraggingImageIndex}
           editDragOverImageIndex={editDragOverImageIndex}
-          categoryOptions={categoryOptions}
           isUpdating={isUpdating}
           isFetchingEditPreview={isFetchingEditPreview}
           imageSizesByUrl={imageSizesByUrl}
           onClose={handleCloseEditDialog}
           onSubmit={handleUpdateGearItem}
           onSetEditTitle={setEditTitle}
+          onSetEditTitleEn={setEditTitleEn}
           onSetEditDescription={setEditDescription}
+          onSetEditDescriptionEn={setEditDescriptionEn}
           onSetEditCategory={setEditCategory}
           onSetEditImageUrlInput={setEditImageUrlInput}
           onSetEditPreviewUrl={setEditPreviewUrl}
@@ -1679,10 +1752,11 @@ function App() {
 
       {isAdminEditing && renameCategoryTarget ? (
         <RenameCategoryDialog
-          renameCategoryTarget={renameCategoryTarget}
           renameCategoryValue={renameCategoryValue}
+          renameCategoryValueEn={renameCategoryValueEn}
           isRenamingCategory={isRenamingCategory}
           onChange={setRenameCategoryValue}
+          onChangeEn={setRenameCategoryValueEn}
           onSubmit={handleSubmitRenameCategory}
           onClose={handleCloseRenameCategoryDialog}
         />
