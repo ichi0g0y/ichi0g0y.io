@@ -13,11 +13,16 @@ tasks:
     cmds:
       - |
         zsh -lc '
+        WEB_PORT="$(awk -F= '\''/^APP_ORIGIN=/{print $2}'\'' .dev.vars 2>/dev/null | sed -E '\''s#.*:([0-9]+).*#\1#'\'' | tail -n1)"
+        if [ -z "$WEB_PORT" ]; then
+          WEB_PORT=5173
+        fi
+        mkdir -p dist
         bun run worker:dev &
         until nc -z 127.0.0.1 8787 >/dev/null 2>&1; do
           sleep 0.2
         done
-        bun run dev
+        bun run dev -- --port "$WEB_PORT"
         '
 
   dev-web:
@@ -25,13 +30,21 @@ tasks:
     deps:
       - install
     cmds:
-      - bun run dev
+      - |
+        zsh -lc '
+        WEB_PORT="$(awk -F= '\''/^APP_ORIGIN=/{print $2}'\'' .dev.vars 2>/dev/null | sed -E '\''s#.*:([0-9]+).*#\1#'\'' | tail -n1)"
+        if [ -z "$WEB_PORT" ]; then
+          WEB_PORT=5173
+        fi
+        bun run dev -- --port "$WEB_PORT"
+        '
 
   worker-dev:
     desc: Cloudflare Workers APIをローカル起動
     deps:
       - install
     cmds:
+      - mkdir -p dist
       - bun run worker:dev
 
   d1-migrate-local:
