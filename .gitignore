@@ -19,6 +19,8 @@ build/
 .env.local
 .env.*.local
 .dev.vars
+.prod.vars
+.dev.vars.prod
 .wrangler/
 
 # IDE and editor

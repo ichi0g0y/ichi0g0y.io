@@ -80,12 +80,31 @@ function App() {
   const introChars = useMemo(() => Array.from(createIntroMessage(activeLanguage)), [activeLanguage])
   const twitchChannelUrl = `https://www.twitch.tv/${TWITCH_CHANNEL}`
   const twitchEmbedSrc = useMemo(() => {
-    const parent = window.location.hostname || 'localhost'
-    return `https://player.twitch.tv/?channel=${TWITCH_CHANNEL}&parent=${parent}&muted=true`
+    const parents = new Set<string>(['ichi0g0y.io', 'www.ichi0g0y.io'])
+    const currentHost = window.location.hostname?.trim().toLowerCase()
+    const isLocalHost = currentHost === 'localhost' || currentHost === '127.0.0.1'
+
+    if (currentHost) {
+      parents.add(currentHost)
+    }
+    if (isLocalHost) {
+      parents.add('localhost')
+    }
+
+    const embedUrl = new URL('https://player.twitch.tv/')
+    embedUrl.searchParams.set('channel', TWITCH_CHANNEL)
+    embedUrl.searchParams.set('muted', 'true')
+    for (const parent of parents) {
+      if (!parent) {
+        continue
+      }
+      embedUrl.searchParams.append('parent', parent)
+    }
+    return embedUrl.toString()
   }, [])
   const typedChars = useTypewriter(introChars)
   const { toast, setToast, showToast } = useToast()
-  const [gearItems, setGearItems] = useState<GearItem[]>(fallbackGearItems)
+  const [gearItems, setGearItems] = useState<GearItem[]>([])
   const [isGearLoading, setIsGearLoading] = useState(true)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [adminEmail, setAdminEmail] = useState<string | null>(null)
@@ -286,9 +305,7 @@ function App() {
       const response = await fetch('/api/gear-items')
       const data = await parseApiResponse(response)
       const items = Array.isArray(data.items) ? (data.items as GearItem[]) : []
-      if (items.length > 0) {
-        setGearItems(sortGearItems(items.map(normalizeGearItem)))
-      }
+      setGearItems(sortGearItems(items.map(normalizeGearItem)))
     } catch {
       setGearItems(sortGearItems(fallbackGearItems))
     } finally {

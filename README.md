@@ -1,4 +1,4 @@
-# ICH Portfolio
+# ichi0g0y.io
 
 `Bun + TypeScript + React + Vite + Tailwind + Radix UI` で構築した、シンプルなSPAポートフォリオです。
 
@@ -53,6 +53,7 @@ task env:restore
 - `.envrc`
 - `.dev.vars`
 - `.dev.vars.example`
+- `.prod.vars`（本番反映用）
 - `env/`
 - `.wrangler/state/`（ローカルD1など）
 

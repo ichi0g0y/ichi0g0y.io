@@ -39,23 +39,51 @@ tasks:
         bun run dev -- --port "$WEB_PORT"
         '
 
-  worker-dev:
+  worker:dev:
     desc: Cloudflare Workers APIをローカル起動
+    aliases:
+      - worker-dev
     deps:
       - install
     cmds:
       - mkdir -p dist
       - bun run worker:dev
 
-  d1-migrate-local:
+  d1:migrate:local:
     desc: D1マイグレーションをローカル適用
+    aliases:
+      - d1-migrate-local
     deps:
       - install
     cmds:
       - bun run d1:migrate:local
 
-  worker-deploy:
+  d1:migrate:remote:
+    desc: D1マイグレーションをリモート適用
+    aliases:
+      - d1-migrate-remote
+    deps:
+      - install
+    cmds:
+      - bun run d1:migrate:remote
+
+  d1:sync:local-to-remote:
+    desc: ローカルD1の gear_items をリモートへ反映（データのみ）
+    aliases:
+      - d1-sync-local-to-remote
+    deps:
+      - install
+    cmds:
+      - mkdir -p .context
+      - bunx wrangler d1 export ichi0g0y-io --local --table gear_items --output .context/d1_local_data.sql --no-schema
+      - bun run d1:migrate:remote
+      - bunx wrangler d1 execute ichi0g0y-io --remote --command "DELETE FROM gear_items; DELETE FROM sqlite_sequence WHERE name='gear_items';"
+      - bunx wrangler d1 execute ichi0g0y-io --remote --file .context/d1_local_data.sql
+
+  worker:deploy:
     desc: Workersへデプロイ
+    aliases:
+      - worker-deploy
     deps:
       - install
     cmds:
@@ -91,3 +119,10 @@ tasks:
     desc: ~/.envs の環境データを Worktree に復元
     cmds:
       - bash ./scripts/sync_workspace_env.sh pull
+
+  env:push:prod:remote:
+    desc: .prod.vars をCloudflareリモート環境へ反映（secret設定 + deploy）
+    deps:
+      - build
+    cmds:
+      - bash ./scripts/push_prod_env_to_remote.sh
