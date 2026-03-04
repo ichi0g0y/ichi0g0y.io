@@ -17,6 +17,11 @@
     height: 34px;
   }
 
+  .back-to-picks {
+    width: 34px;
+    height: 34px;
+  }
+
   .twitch-zone {
     width: min(420px, 84vw);
   }

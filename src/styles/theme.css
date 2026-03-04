@@ -33,14 +33,16 @@ body[data-theme='dark'] .app-toast {
 }
 
 body[data-theme='dark'] .mode-toggle-button,
-body[data-theme='dark'] .top-control-select {
+body[data-theme='dark'] .top-control-select,
+body[data-theme='dark'] .back-to-picks {
   background: #111b2f;
   border-color: #2b3953;
   color: #dbe6f7;
 }
 
 body[data-theme='dark'] .mode-toggle-button:hover,
-body[data-theme='dark'] .top-control-select:hover {
+body[data-theme='dark'] .top-control-select:hover,
+body[data-theme='dark'] .back-to-picks:hover {
   background: #16243f;
   border-color: #435a80;
 }

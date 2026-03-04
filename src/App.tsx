@@ -1,4 +1,4 @@
-import { Cross2Icon, EyeOpenIcon, GlobeIcon, MoonIcon, Pencil2Icon, PlusIcon, SunIcon } from '@radix-ui/react-icons'
+import { ChevronUpIcon, Cross2Icon, EyeOpenIcon, GlobeIcon, MoonIcon, Pencil2Icon, PlusIcon, SunIcon } from '@radix-ui/react-icons'
 import {
   useCallback,
   useEffect,
@@ -36,6 +36,7 @@ import { createIntroMessage, getAuthErrorMessage, normalizeGearItem, normalizeIm
 type AppLocalePreference = AppLocale | 'system'
 type AppTheme = 'light' | 'dark'
 type AppThemePreference = AppTheme | 'system'
+const GEAR_PAGE_SIZE = 12
 
 function detectSystemLocale(): AppLocale {
   if (typeof window === 'undefined') {
@@ -149,6 +150,8 @@ function App() {
   const [isTranslatingEditDescriptionEn, setIsTranslatingEditDescriptionEn] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState('all')
+  const [visibleGearCount, setVisibleGearCount] = useState(GEAR_PAGE_SIZE)
+  const [showBackToPicks, setShowBackToPicks] = useState(false)
   const [gearImageIndexes, setGearImageIndexes] = useState<Record<number, number>>({})
   const [renameCategoryTarget, setRenameCategoryTarget] = useState<string | null>(null)
   const [renameCategoryValue, setRenameCategoryValue] = useState('')
@@ -156,6 +159,8 @@ function App() {
   const [isRenamingCategory, setIsRenamingCategory] = useState(false)
   const [imageSizesByUrl, setImageSizesByUrl] = useState<Record<string, ImageSize>>({})
   const addDialogUrlInputRef = useRef<HTMLInputElement | null>(null)
+  const gearCategoryRowRef = useRef<HTMLDivElement | null>(null)
+  const gearLoadMoreRef = useRef<HTMLDivElement | null>(null)
   const tapStateRef = useRef({ count: 0, lastTappedAt: 0 })
   const isAdminEditing = Boolean(accessToken && isEditMode)
   const isModeToggleLocked = isAdding || isFetchingPreview || isUpdating || deletingGearId !== null || isRenamingCategory
@@ -212,6 +217,11 @@ function App() {
     }
     return gearItems.filter((item) => item.category === selectedCategory)
   }, [gearItems, selectedCategory])
+  const visibleFilteredGearItems = useMemo(
+    () => filteredGearItems.slice(0, visibleGearCount),
+    [filteredGearItems, visibleGearCount],
+  )
+  const hasMoreFilteredGearItems = visibleGearCount < filteredGearItems.length
   const newGearImageUrlSet = useMemo(() => new Set(newGearImageUrls), [newGearImageUrls])
   const editImageUrlSet = useMemo(() => new Set(editImageUrls), [editImageUrls])
 
@@ -363,6 +373,52 @@ function App() {
       setSelectedCategory('all')
     }
   }, [categoryOptions, selectedCategory])
+
+  useEffect(() => {
+    setVisibleGearCount(GEAR_PAGE_SIZE)
+  }, [selectedCategory, gearItems.length])
+
+  useEffect(() => {
+    const node = gearLoadMoreRef.current
+    if (!node || isGearLoading || !hasMoreFilteredGearItems) {
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (!entry?.isIntersecting) {
+          return
+        }
+        setVisibleGearCount((previous) => Math.min(previous + GEAR_PAGE_SIZE, filteredGearItems.length))
+      },
+      { root: null, rootMargin: '240px 0px', threshold: 0.01 },
+    )
+    observer.observe(node)
+    return () => {
+      observer.disconnect()
+    }
+  }, [filteredGearItems.length, hasMoreFilteredGearItems, isGearLoading])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    const handleScroll = () => {
+      const categoryRow = gearCategoryRowRef.current
+      if (!categoryRow) {
+        setShowBackToPicks(window.scrollY > 420)
+        return
+      }
+      const categoryRowOffsetTop = categoryRow.getBoundingClientRect().top + window.scrollY
+      setShowBackToPicks(window.scrollY > categoryRowOffsetTop + 280)
+    }
+    handleScroll()
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
 
   useEffect(() => {
     if (!isAddFormOpen || addDialogStep !== 'url') {
@@ -1370,6 +1426,16 @@ function App() {
     setGearImageIndexes((previous) => ({ ...previous, [item.id]: nextIndex }))
   }, [])
 
+  const handleBackToPicks = useCallback(() => {
+    const categoryRow = gearCategoryRowRef.current
+    if (!categoryRow) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    const nextTop = categoryRow.getBoundingClientRect().top + window.scrollY - 16
+    window.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' })
+  }, [])
+
   const draggingGearCategory = useMemo(() => {
     if (draggingGearId === null) {
       return null
@@ -1511,7 +1577,7 @@ function App() {
           ) : null}
         </div>
 
-        <div className="gear-filter-row">
+        <div ref={gearCategoryRowRef} className="gear-filter-row">
           <button
             type="button"
             className={`gear-filter-chip${selectedCategory === 'all' ? ' is-active' : ''}`}
@@ -1561,7 +1627,7 @@ function App() {
         {isGearLoading ? <p className="gear-loading">{labels.gearLoading}</p> : null}
 
         <ul className="gear-item-grid">
-          {filteredGearItems.map((item) => {
+          {visibleFilteredGearItems.map((item) => {
             const itemTitle = activeLanguage === 'en' && item.titleEn ? item.titleEn : item.title
             const itemCategory = activeLanguage === 'en' && item.categoryEn ? item.categoryEn : item.category
             const itemDescription = activeLanguage === 'en' && item.descriptionEn ? item.descriptionEn : item.description
@@ -1701,6 +1767,7 @@ function App() {
         {!isGearLoading && filteredGearItems.length < 1 ? (
           <p className="gear-loading">{labels.noItems}</p>
         ) : null}
+        {!isGearLoading && hasMoreFilteredGearItems ? <div ref={gearLoadMoreRef} className="gear-load-sentinel" aria-hidden="true" /> : null}
       </section>
 
       {isAdminEditing && isAddFormOpen ? (
@@ -1819,6 +1886,15 @@ function App() {
           {toast.message}
         </div>
       ) : null}
+
+      <button
+        type="button"
+        className={`back-to-picks${showBackToPicks ? ' is-visible' : ''}`}
+        onClick={handleBackToPicks}
+        aria-label={activeLanguage === 'en' ? 'Back to Picks categories' : 'Picksカテゴリに戻る'}
+      >
+        <ChevronUpIcon />
+      </button>
 
       <footer className="copyright">Copyright &copy; {new Date().getFullYear()} ichi0g0y</footer>
     </main>
