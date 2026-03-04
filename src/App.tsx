@@ -292,6 +292,15 @@ function App() {
     })
   }, [])
 
+  const handleGearCardImageError = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
+    const image = event.currentTarget
+    const fallbackImageUrl = '/gear/gaming-pc.jpg'
+    if (image.currentSrc.includes(fallbackImageUrl) || image.src.includes(fallbackImageUrl)) {
+      return
+    }
+    image.src = fallbackImageUrl
+  }, [])
+
   const getImageSizeLabel = useCallback(
     (url: string) => {
       const size = imageSizesByUrl[url]
@@ -1643,6 +1652,7 @@ function App() {
                   src={currentImageUrl}
                   alt={activeLanguage === 'en' ? `${itemTitle} image` : `${itemTitle} の画像`}
                   loading="lazy"
+                  onError={handleGearCardImageError}
                   draggable={false}
                 />
                 {imageCount > 1 ? (
