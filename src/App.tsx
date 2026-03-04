@@ -1,4 +1,4 @@
-import { Cross2Icon, EyeOpenIcon, GlobeIcon, Pencil2Icon, PlusIcon } from '@radix-ui/react-icons'
+import { Cross2Icon, EyeOpenIcon, GlobeIcon, MixIcon, MoonIcon, Pencil2Icon, PlusIcon, SunIcon } from '@radix-ui/react-icons'
 import {
   useCallback,
   useEffect,
@@ -18,6 +18,7 @@ import { EditGearDialog } from './components/EditGearDialog'
 import { RenameCategoryDialog } from './components/RenameCategoryDialog'
 import {
   APP_LOCALE_STORAGE_KEY,
+  APP_THEME_STORAGE_KEY,
   DEFAULT_NEW_GEAR_CATEGORY,
   HIDDEN_TAP_TARGET,
   HIDDEN_TAP_WINDOW_MS,
@@ -32,19 +33,51 @@ import { useTypewriter } from './hooks/useTypewriter'
 import type { AddDialogStep, AppLocale, GearItem, ImageSize, LinkPreviewData } from './types'
 import { createIntroMessage, getAuthErrorMessage, normalizeGearItem, normalizeImageUrls } from './utils'
 
+type AppLocalePreference = AppLocale | 'system'
+type AppTheme = 'light' | 'dark'
+type AppThemePreference = AppTheme | 'system'
+
+function detectSystemLocale(): AppLocale {
+  if (typeof window === 'undefined') {
+    return 'ja'
+  }
+  return window.navigator.language.toLowerCase().startsWith('ja') ? 'ja' : 'en'
+}
+
+function detectSystemTheme(): AppTheme {
+  if (typeof window === 'undefined') {
+    return 'light'
+  }
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
 function App() {
-  const [language, setLanguage] = useState<AppLocale>(() => {
+  const [languagePreference, setLanguagePreference] = useState<AppLocalePreference>(() => {
     if (typeof window === 'undefined') {
-      return 'ja'
+      return 'system'
     }
     const stored = window.localStorage.getItem(APP_LOCALE_STORAGE_KEY)
-    if (stored === 'ja' || stored === 'en') {
+    if (stored === 'system' || stored === 'ja' || stored === 'en') {
       return stored
     }
-    return window.navigator.language.toLowerCase().startsWith('ja') ? 'ja' : 'en'
+    return 'system'
   })
-  const labels = UI_LABELS[language]
-  const introChars = useMemo(() => Array.from(createIntroMessage(language)), [language])
+  const [themePreference, setThemePreference] = useState<AppThemePreference>(() => {
+    if (typeof window === 'undefined') {
+      return 'system'
+    }
+    const stored = window.localStorage.getItem(APP_THEME_STORAGE_KEY)
+    if (stored === 'system' || stored === 'light' || stored === 'dark') {
+      return stored
+    }
+    return 'system'
+  })
+  const [systemLanguage, setSystemLanguage] = useState<AppLocale>(detectSystemLocale)
+  const [systemTheme, setSystemTheme] = useState<AppTheme>(detectSystemTheme)
+  const activeLanguage = languagePreference === 'system' ? systemLanguage : languagePreference
+  const activeTheme = themePreference === 'system' ? systemTheme : themePreference
+  const labels = UI_LABELS[activeLanguage]
+  const introChars = useMemo(() => Array.from(createIntroMessage(activeLanguage)), [activeLanguage])
   const twitchChannelUrl = `https://www.twitch.tv/${TWITCH_CHANNEL}`
   const twitchEmbedSrc = useMemo(() => {
     const parent = window.location.hostname || 'localhost'
@@ -59,7 +92,7 @@ function App() {
   const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false)
   const [authMessage, setAuthMessage] = useState('')
   const [isAuthBusy, setIsAuthBusy] = useState(false)
-  const [isEditMode, setIsEditMode] = useState(true)
+  const [isEditMode, setIsEditMode] = useState(false)
   const [isAddFormOpen, setIsAddFormOpen] = useState(false)
   const [newGearUrl, setNewGearUrl] = useState('')
   const [newGearTitle, setNewGearTitle] = useState('')
@@ -124,10 +157,10 @@ function App() {
         continue
       }
       const translatedCategory = item.categoryEn?.trim()
-      map.set(sourceCategory, language === 'en' && translatedCategory ? translatedCategory : sourceCategory)
+      map.set(sourceCategory, activeLanguage === 'en' && translatedCategory ? translatedCategory : sourceCategory)
     }
     return map
-  }, [gearItems, language])
+  }, [activeLanguage, gearItems])
 
   const filteredGearItems = useMemo(() => {
     if (selectedCategory === 'all') {
@@ -142,8 +175,44 @@ function App() {
     if (typeof window === 'undefined') {
       return
     }
-    window.localStorage.setItem(APP_LOCALE_STORAGE_KEY, language)
-  }, [language])
+    window.localStorage.setItem(APP_LOCALE_STORAGE_KEY, languagePreference)
+  }, [languagePreference])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    window.localStorage.setItem(APP_THEME_STORAGE_KEY, themePreference)
+    window.document.body.dataset.theme = activeTheme
+  }, [activeTheme, themePreference])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    const handleLanguageChange = () => {
+      setSystemLanguage(detectSystemLocale())
+    }
+    window.addEventListener('languagechange', handleLanguageChange)
+    return () => {
+      window.removeEventListener('languagechange', handleLanguageChange)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleThemeChange = () => {
+      setSystemTheme(mediaQuery.matches ? 'dark' : 'light')
+    }
+    handleThemeChange()
+    mediaQuery.addEventListener('change', handleThemeChange)
+    return () => {
+      mediaQuery.removeEventListener('change', handleThemeChange)
+    }
+  }, [])
   const newGearPrimaryImageUrl = newGearImageUrls[0] ?? null
 
   const handlePreviewImageLoad = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
@@ -341,7 +410,7 @@ function App() {
       })
       setAccessToken(null)
       setAdminEmail(null)
-      setIsEditMode(true)
+      setIsEditMode(false)
       setIsAddFormOpen(false)
       setNewGearUrl('')
       setNewGearTitle('')
@@ -1186,22 +1255,68 @@ function App() {
 
   const canReorderCategories = Boolean(isAdminEditing && !isReordering)
   const canReorderCards = Boolean(isAdminEditing && !isReordering)
-  const nextLanguage = language === 'ja' ? 'en' : 'ja'
+  const nextLanguagePreference: AppLocalePreference =
+    languagePreference === 'system' ? 'ja' : languagePreference === 'ja' ? 'en' : 'system'
+  const nextThemePreference: AppThemePreference =
+    themePreference === 'system' ? 'light' : themePreference === 'light' ? 'dark' : 'system'
+  const isDarkTheme = activeTheme === 'dark'
+  const themePreferenceCode = themePreference === 'system' ? 'SYS' : themePreference === 'dark' ? 'D' : 'L'
+  const languagePreferenceCode = languagePreference === 'system' ? 'SYS' : languagePreference.toUpperCase()
+  const themeAriaLabel =
+    nextThemePreference === 'system'
+      ? labels.themeToSystemAria
+      : nextThemePreference === 'dark'
+        ? labels.themeToDarkAria
+        : labels.themeToLightAria
+  const languageAriaLabel =
+    nextLanguagePreference === 'system'
+      ? labels.languageToSystemAria
+      : nextLanguagePreference === 'en'
+        ? labels.languageToEnglishAria
+        : labels.languageToJapaneseAria
 
   return (
     <main className="page">
-      {accessToken ? (
+      <div className="top-controls">
+        {accessToken ? (
+          <button
+            className={`mode-toggle-button${isEditMode ? ' is-edit' : ''}`}
+            type="button"
+            aria-pressed={isEditMode}
+            disabled={isModeToggleLocked}
+            onClick={() => setIsEditMode((prev) => !prev)}
+          >
+            {isEditMode ? <Pencil2Icon /> : <EyeOpenIcon />}
+            <span>{isEditMode ? labels.modeEdit : labels.modeView}</span>
+          </button>
+        ) : null}
+
         <button
-          className={`mode-toggle-button${isEditMode ? ' is-edit' : ''}`}
+          className={`theme-toggle-button${isDarkTheme ? ' is-dark' : ''}`}
           type="button"
-          aria-pressed={isEditMode}
-          disabled={isModeToggleLocked}
-          onClick={() => setIsEditMode((prev) => !prev)}
+          aria-label={themeAriaLabel}
+          title={themeAriaLabel}
+          onClick={() => setThemePreference(nextThemePreference)}
         >
-          {isEditMode ? <Pencil2Icon /> : <EyeOpenIcon />}
-          <span>{isEditMode ? labels.modeEdit : labels.modeView}</span>
+          {themePreference === 'system' ? <MixIcon /> : isDarkTheme ? <SunIcon /> : <MoonIcon />}
+          <span className="theme-toggle-code" aria-hidden="true">
+            {themePreferenceCode}
+          </span>
         </button>
-      ) : null}
+
+        <button
+          className="language-toggle-button"
+          type="button"
+          aria-label={languageAriaLabel}
+          title={languageAriaLabel}
+          onClick={() => setLanguagePreference(nextLanguagePreference)}
+        >
+          <GlobeIcon />
+          <span className="language-toggle-code" aria-hidden="true">
+            {languagePreferenceCode}
+          </span>
+        </button>
+      </div>
 
       <section className="title-area" aria-label="profile header">
         <img className="main-image" src="/usagi_toilet.png" alt="うさぎのイラスト" />
@@ -1324,9 +1439,9 @@ function App() {
 
         <ul className="gear-item-grid">
           {filteredGearItems.map((item) => {
-            const itemTitle = language === 'en' && item.titleEn ? item.titleEn : item.title
-            const itemCategory = language === 'en' && item.categoryEn ? item.categoryEn : item.category
-            const itemDescription = language === 'en' && item.descriptionEn ? item.descriptionEn : item.description
+            const itemTitle = activeLanguage === 'en' && item.titleEn ? item.titleEn : item.title
+            const itemCategory = activeLanguage === 'en' && item.categoryEn ? item.categoryEn : item.category
+            const itemDescription = activeLanguage === 'en' && item.descriptionEn ? item.descriptionEn : item.description
             const itemImageUrls =
               item.imageUrls.length > 0 ? item.imageUrls : item.imageUrl ? [item.imageUrl] : ['/gear/gaming-pc.jpg']
             const imageCount = itemImageUrls.length
@@ -1337,7 +1452,7 @@ function App() {
                 <img
                   className={`gear-item-photo${item.imageFit === 'contain' ? ' is-contain' : ''}`}
                   src={currentImageUrl}
-                  alt={language === 'en' ? `${itemTitle} image` : `${itemTitle} の画像`}
+                  alt={activeLanguage === 'en' ? `${itemTitle} image` : `${itemTitle} の画像`}
                   loading="lazy"
                   draggable={false}
                 />
@@ -1351,7 +1466,7 @@ function App() {
                         event.stopPropagation()
                       }}
                       onClick={(event) => handleSwitchGearImage(event, item, -1)}
-                      aria-label={language === 'en' ? `Previous image for ${itemTitle}` : `${itemTitle} の前の画像`}
+                      aria-label={activeLanguage === 'en' ? `Previous image for ${itemTitle}` : `${itemTitle} の前の画像`}
                     >
                       &#x2039;
                     </button>
@@ -1363,14 +1478,14 @@ function App() {
                         event.stopPropagation()
                       }}
                       onClick={(event) => handleSwitchGearImage(event, item, 1)}
-                      aria-label={language === 'en' ? `Next image for ${itemTitle}` : `${itemTitle} の次の画像`}
+                      aria-label={activeLanguage === 'en' ? `Next image for ${itemTitle}` : `${itemTitle} の次の画像`}
                     >
                       &#x203A;
                     </button>
                     <div
                       className="gear-image-dots"
                       role="tablist"
-                      aria-label={language === 'en' ? `Image list for ${itemTitle}` : `${itemTitle} の画像一覧`}
+                      aria-label={activeLanguage === 'en' ? `Image list for ${itemTitle}` : `${itemTitle} の画像一覧`}
                     >
                       {itemImageUrls.map((_, index) => (
                         <button
@@ -1382,7 +1497,7 @@ function App() {
                             event.stopPropagation()
                           }}
                           onClick={(event) => handleSelectGearImage(event, item, index)}
-                          aria-label={language === 'en' ? `Show image ${index + 1}` : `${index + 1}枚目の画像を表示`}
+                          aria-label={activeLanguage === 'en' ? `Show image ${index + 1}` : `${index + 1}枚目の画像を表示`}
                           aria-current={index === imageIndex ? 'true' : undefined}
                         />
                       ))}
@@ -1573,19 +1688,6 @@ function App() {
           {toast.message}
         </div>
       ) : null}
-
-      <button
-        className="language-toggle-button"
-        type="button"
-        aria-label={labels.languageAria}
-        title={labels.languageAria}
-        onClick={() => setLanguage(nextLanguage)}
-      >
-        <GlobeIcon />
-        <span className="language-toggle-code" aria-hidden="true">
-          {language.toUpperCase()}
-        </span>
-      </button>
 
       <footer className="copyright">Copyright &copy; {new Date().getFullYear()} ichi0g0y</footer>
     </main>
