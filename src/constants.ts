@@ -113,6 +113,7 @@ export const HIDDEN_TAP_WINDOW_MS = 1800
 export const TWITCH_CHANNEL = 'ichi0g0y'
 export const DEFAULT_NEW_GEAR_CATEGORY = 'その他'
 export const APP_LOCALE_STORAGE_KEY = 'app-locale'
+export const APP_THEME_STORAGE_KEY = 'app-theme'
 // 手動切り替え: 配信中なら true、オフラインなら false
 export const IS_LIVE = true
 
@@ -128,7 +129,13 @@ export const UI_LABELS = {
     allCategory: 'すべて',
     gearLoading: '機材情報を読み込み中...',
     noItems: '選択中のカテゴリには機材がありません。',
-    languageAria: '英語に切り替え',
+    languageAria: '言語設定',
+    languageToSystemAria: '言語設定をシステムに戻す',
+    languageToJapaneseAria: '日本語に切り替え',
+    languageToEnglishAria: '英語に切り替え',
+    themeToDarkAria: 'ダークモードに切り替え',
+    themeToLightAria: 'ライトモードに切り替え',
+    themeToSystemAria: 'テーマ設定をシステムに戻す',
   },
   en: {
     modeEdit: 'Edit mode',
@@ -141,6 +148,12 @@ export const UI_LABELS = {
     allCategory: 'All',
     gearLoading: 'Loading picks...',
     noItems: 'No items in the selected category.',
-    languageAria: '日本語に切り替え',
+    languageAria: 'Language settings',
+    languageToSystemAria: 'Use system language',
+    languageToJapaneseAria: 'Switch to Japanese',
+    languageToEnglishAria: 'Switch to English',
+    themeToDarkAria: 'Switch to dark mode',
+    themeToLightAria: 'Switch to light mode',
+    themeToSystemAria: 'Use system theme',
   },
 } as const

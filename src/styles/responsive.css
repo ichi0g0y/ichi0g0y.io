@@ -1,4 +1,23 @@
 @media (max-width: 860px) {
+  .top-controls {
+    top: 0.6rem;
+    right: 0.6rem;
+    gap: 0.35rem;
+  }
+
+  .mode-toggle-button {
+    height: 34px;
+    padding: 0 0.5rem;
+    font-size: 0.7rem;
+    gap: 0.32rem;
+  }
+
+  .theme-toggle-button,
+  .language-toggle-button {
+    width: 34px;
+    height: 34px;
+  }
+
   .twitch-zone {
     width: min(420px, 84vw);
   }

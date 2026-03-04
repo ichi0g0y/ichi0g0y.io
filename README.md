@@ -56,7 +56,7 @@ task env:restore
 - `env/`
 - `.wrangler/state/`（ローカルD1など）
 
-`conductor.json` の `setup` では復元 (`env:restore` 相当) を自動実行します。
+`conductor.json` の `setup` では復元（`env:restore` 相当）と依存関係インストール（`task install`）を自動実行します。
 
 ## ビルド
 
