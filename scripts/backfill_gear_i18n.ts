@@ -21,7 +21,7 @@ interface Translation {
   descriptionEn: string | null
 }
 
-const DATABASE_NAME = 'ichi0g0y_portfolio'
+const DATABASE_NAME = 'ichi0g0y-io'
 const DEFAULT_MODEL = 'gpt-4.1-mini'
 const TRANSLATE_TIMEOUT_MS = 15_000
 
