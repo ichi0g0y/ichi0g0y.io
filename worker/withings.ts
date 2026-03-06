@@ -5,6 +5,7 @@ import type { PostLatestWithingsMeasurementTweetResult } from './twitter-post'
 import type { WithingsMeasurementForTweet } from './twitter-types'
 import type { WithingsNotificationPayload } from './withings-types'
 import {
+  WITHINGS_NOTIFY_APPLI_ACTIVITY,
   WITHINGS_AUTHORIZE_URL,
   WITHINGS_NOTIFY_APPLI_MEASURE,
   WITHINGS_OAUTH_STATE_TTL_SEC,
@@ -29,12 +30,14 @@ import {
   verifySignedWithingsState,
 } from './withings-helpers'
 import {
+  clearNotifySubscription,
   ensureConnectionReady,
   exchangeAuthorizationCode,
   getStoredConnection,
   markNotifySubscription,
   subscribeNotify,
   syncMeasurements,
+  unsubscribeNotify,
   upsertConnection,
 } from './withings-sync'
 
@@ -76,8 +79,39 @@ async function parseNotifyPayload(request: Request): Promise<WithingsNotificatio
     appli: parseOptionalInteger(raw.get('appli')),
     startDate: parseOptionalInteger(raw.get('startdate')),
     endDate: parseOptionalInteger(raw.get('enddate')),
+    dateYmd: raw.get('date')?.trim() || null,
     raw: rawObject,
   }
+}
+
+function parseNotifyDateYmd(value: string | null) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null
+  }
+  const startMs = Date.parse(`${value}T00:00:00Z`)
+  if (!Number.isFinite(startMs)) {
+    return null
+  }
+  const startDate = Math.floor(startMs / 1000)
+  return {
+    startDate,
+    endDate: startDate + (24 * 60 * 60) - 1,
+  }
+}
+
+function resolveNotifySyncWindow(payload: WithingsNotificationPayload) {
+  if (typeof payload.startDate === 'number' || typeof payload.endDate === 'number') {
+    return {
+      startDate: payload.startDate,
+      endDate: payload.endDate,
+    }
+  }
+
+  if (payload.appli === WITHINGS_NOTIFY_APPLI_ACTIVITY) {
+    return parseNotifyDateYmd(payload.dateYmd)
+  }
+
+  return null
 }
 
 type WithingsNotifyAuthMode = 'token' | 'legacy_callback' | 'simulation'
@@ -221,7 +255,8 @@ async function processWithingsNotify(
     })
   }
 
-  const synced = await syncMeasurements(env, connection, payload.startDate, payload.endDate)
+  const notifyWindow = resolveNotifySyncWindow(payload)
+  const synced = await syncMeasurements(env, connection, notifyWindow?.startDate ?? null, notifyWindow?.endDate ?? null)
   const repairConnection = options.repairSubscription ? await ensureConnectionReady(env) : connection
   const subscriptionRepair = options.repairSubscription && repairConnection
     ? await repairNotifySubscriptionIfNeeded(request, env, repairConnection)
@@ -305,6 +340,20 @@ function buildSimulatedNotifyMessage(result: WithingsNotifyProcessResult) {
     return '擬似Notifyを実行しました。体重系通知ではないため、X投稿は対象外です。'
   }
   return '擬似Notifyを実行しました。X投稿は抑止しています。'
+}
+
+function buildNotifySubscriptionMessage(
+  baseMessage: string,
+  details: Array<[label: string, value: string | number | boolean | null | undefined]>,
+) {
+  const lines = [baseMessage]
+  for (const [label, value] of details) {
+    if (value === null || value === undefined || value === '') {
+      continue
+    }
+    lines.push(`${label}: ${String(value)}`)
+  }
+  return lines.join('\n')
 }
 
 export async function handleWithingsStatus(env: Env) {
@@ -789,6 +838,113 @@ export async function handleWithingsSync(env: Env, request?: Request) {
     startDate,
     endDate,
     notifySubscription,
+  })
+}
+
+export async function handleWithingsNotifySubscribe(request: Request, env: Env) {
+  const connection = await ensureConnectionReady(env)
+  if (!connection) {
+    return errorResponse('Withings連携が未設定です', 400)
+  }
+
+  const notifyResult = await subscribeNotify(request, env, connection)
+  if (!notifyResult.ok) {
+    const message = buildNotifySubscriptionMessage('Withings通知(Webhook)の登録に失敗しました。', [
+      ['callbackUrl', notifyResult.callbackUrl],
+      ['status', notifyResult.status],
+      ['error', notifyResult.error],
+      ['usedFallback', notifyResult.usedFallback],
+      ['failedApplis', notifyResult.failedApplis.join(',')],
+    ])
+    console.warn('[withings] notify subscribe failed', {
+      callbackUrl: notifyResult.callbackUrl,
+      status: notifyResult.status,
+      error: notifyResult.error,
+      usedFallback: notifyResult.usedFallback,
+      subscribedApplis: notifyResult.subscribedApplis,
+      failedApplis: notifyResult.failedApplis,
+    })
+    return errorResponse(message, 502, {
+      callbackUrl: notifyResult.callbackUrl,
+      status: notifyResult.status,
+      error: notifyResult.error,
+      usedFallback: notifyResult.usedFallback,
+      subscribedApplis: notifyResult.subscribedApplis,
+      failedApplis: notifyResult.failedApplis,
+    })
+  }
+
+  const subscription = await markNotifySubscription(env, connection, notifyResult.callbackUrl)
+  const message = buildNotifySubscriptionMessage('Withings通知(Webhook)を登録しました。', [
+    ['callbackUrl', subscription.callbackUrl],
+    ['usedFallback', notifyResult.usedFallback],
+    ['subscribedApplis', notifyResult.subscribedApplis.join(',')],
+    ['failedApplis', notifyResult.failedApplis.join(',')],
+  ])
+  console.info('[withings] notify subscribe succeeded', {
+    callbackUrl: subscription.callbackUrl,
+    usedFallback: notifyResult.usedFallback,
+    subscribedApplis: notifyResult.subscribedApplis,
+    failedApplis: notifyResult.failedApplis,
+  })
+  return jsonResponse({
+    ok: true,
+    message,
+    callbackUrl: subscription.callbackUrl,
+    notifySubscribedAt: subscription.notifySubscribedAt,
+    usedFallback: notifyResult.usedFallback,
+    subscribedApplis: notifyResult.subscribedApplis,
+    failedApplis: notifyResult.failedApplis,
+  })
+}
+
+export async function handleWithingsNotifyUnsubscribe(request: Request, env: Env) {
+  const connection = await ensureConnectionReady(env)
+  if (!connection) {
+    return errorResponse('Withings連携が未設定です', 400)
+  }
+
+  const notifyResult = await unsubscribeNotify(request, env, connection)
+  if (!notifyResult.ok) {
+    const message = buildNotifySubscriptionMessage('Withings通知(Webhook)の解除に失敗しました。', [
+      ['callbackUrls', notifyResult.callbackUrls.join(', ')],
+      ['status', notifyResult.status],
+      ['error', notifyResult.error],
+      ['failedApplis', notifyResult.failedApplis.join(',')],
+    ])
+    console.warn('[withings] notify unsubscribe failed', {
+      callbackUrls: notifyResult.callbackUrls,
+      status: notifyResult.status,
+      error: notifyResult.error,
+      unsubscribedApplis: notifyResult.unsubscribedApplis,
+      failedApplis: notifyResult.failedApplis,
+    })
+    return errorResponse(message, 502, {
+      callbackUrls: notifyResult.callbackUrls,
+      status: notifyResult.status,
+      error: notifyResult.error,
+      unsubscribedApplis: notifyResult.unsubscribedApplis,
+      failedApplis: notifyResult.failedApplis,
+    })
+  }
+
+  await clearNotifySubscription(env)
+  const message = buildNotifySubscriptionMessage('Withings通知(Webhook)を解除しました。', [
+    ['callbackUrls', notifyResult.callbackUrls.join(', ')],
+    ['unsubscribedApplis', notifyResult.unsubscribedApplis.join(',')],
+    ['failedApplis', notifyResult.failedApplis.join(',')],
+  ])
+  console.info('[withings] notify unsubscribe succeeded', {
+    callbackUrls: notifyResult.callbackUrls,
+    unsubscribedApplis: notifyResult.unsubscribedApplis,
+    failedApplis: notifyResult.failedApplis,
+  })
+  return jsonResponse({
+    ok: true,
+    message,
+    callbackUrls: notifyResult.callbackUrls,
+    unsubscribedApplis: notifyResult.unsubscribedApplis,
+    failedApplis: notifyResult.failedApplis,
   })
 }
 
