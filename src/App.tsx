@@ -1,5 +1,5 @@
 import { ChevronUpIcon, Cross2Icon, EyeOpenIcon, GlobeIcon, MoonIcon, Pencil2Icon, PlusIcon, SunIcon } from '@radix-ui/react-icons'
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 import { AddGearDialog } from './components/AddGearDialog'
 import { AuthDialog } from './components/AuthDialog'
@@ -81,6 +81,7 @@ function App() {
     isWithingsLoading,
     isWithingsConnecting,
     isWithingsSyncing,
+    isWithingsNotifyTesting,
     selectedWithingsView,
     setSelectedWithingsView,
     isWithingsSettingsDialogOpen,
@@ -98,6 +99,7 @@ function App() {
     formatWithingsMeasuredAt,
     handleWithingsConnect,
     handleWithingsSync,
+    handleWithingsNotifyTest,
     handleOpenWithingsSettingsDialog,
     handleCloseWithingsSettingsDialog,
   } = useWithings({
@@ -117,6 +119,7 @@ function App() {
     twitterAutoPostEnabledDraft,
     setTwitterAutoPostEnabledDraft,
     isTwitterTemplateSaving,
+    isTwitterLatestPosting,
     isTwitterTestPosting,
     twitterAccountLabel,
     twitterLastPostedLabel,
@@ -129,6 +132,7 @@ function App() {
     handleCloseTwitterTemplateDialog,
     handleInsertTwitterPlaceholder,
     handleSaveTwitterTemplate,
+    handleTwitterLatestPost,
     handleTestTwitterPost,
   } = useTwitter({
     accessToken,
@@ -143,6 +147,36 @@ function App() {
     latestMeasurement,
     formatWithingsMeasuredAt,
   })
+
+  const handleOpenWithingsSettingsDialogExclusive = useCallback(() => {
+    if (isTwitterTemplateDialogOpen && (isTwitterTemplateSaving || isTwitterLatestPosting || isTwitterTestPosting)) {
+      return
+    }
+    handleCloseTwitterTemplateDialog()
+    handleOpenWithingsSettingsDialog()
+  }, [
+    handleCloseTwitterTemplateDialog,
+    handleOpenWithingsSettingsDialog,
+    isTwitterLatestPosting,
+    isTwitterTemplateDialogOpen,
+    isTwitterTemplateSaving,
+    isTwitterTestPosting,
+  ])
+
+  const handleOpenTwitterTemplateDialogExclusive = useCallback(() => {
+    if (isWithingsSettingsDialogOpen && (isWithingsConnecting || isWithingsSyncing || isWithingsNotifyTesting)) {
+      return
+    }
+    handleCloseWithingsSettingsDialog()
+    handleOpenTwitterTemplateDialog()
+  }, [
+    handleCloseWithingsSettingsDialog,
+    handleOpenTwitterTemplateDialog,
+    isWithingsConnecting,
+    isWithingsNotifyTesting,
+    isWithingsSettingsDialogOpen,
+    isWithingsSyncing,
+  ])
 
   const {
     isGearLoading,
@@ -218,7 +252,6 @@ function App() {
     isModeToggleLocked,
     categoryOptions,
     categoryEnByCategory,
-    editCategoryDisplayOptions,
     categoryDisplayMap,
     filteredGearItems,
     visibleFilteredGearItems,
@@ -334,7 +367,7 @@ function App() {
           <button
             className="mode-toggle-button"
             type="button"
-            onClick={handleOpenWithingsSettingsDialog}
+            onClick={handleOpenWithingsSettingsDialogExclusive}
             disabled={isWithingsConnecting || isWithingsLoading}
           >
             <span>{labels.withingsSettingsButton}</span>
@@ -345,7 +378,7 @@ function App() {
           <button
             className="mode-toggle-button"
             type="button"
-            onClick={handleOpenTwitterTemplateDialog}
+            onClick={handleOpenTwitterTemplateDialogExclusive}
             disabled={isTwitterTemplateSaving || isTwitterStatusLoading}
             aria-label={labels.twitterTemplateEditAria}
           >
@@ -831,7 +864,7 @@ function App() {
           editDescriptionEn={editDescriptionEn}
           editCategory={editCategory}
           editCategoryLabel={activeLanguage === 'en' ? categoryEnByCategory.get(editCategory) ?? editCategory : editCategory}
-          categoryDisplayOptions={editCategoryDisplayOptions}
+          categoryOptions={categoryOptions}
           editImageUrls={editImageUrls}
           editImageUrlInput={editImageUrlInput}
           editImageCandidates={editImageCandidates}
@@ -895,10 +928,12 @@ function App() {
           isOpen={isWithingsSettingsDialogOpen}
           isConnecting={isWithingsConnecting}
           isSyncing={isWithingsSyncing}
+          isTestingNotify={isWithingsNotifyTesting}
           title={labels.withingsSettingsDialogTitle}
           description={labels.withingsConnectHint}
           connectLabel={labels.withingsConnectButton}
           syncLabel={labels.withingsSyncButton}
+          notifyTestLabel={isWithingsNotifyTesting ? labels.withingsNotifyTestingButton : labels.withingsNotifyTestButton}
           statusLabel={labels.withingsStatusLabel}
           statusValue={withingsStatusValue}
           userLabel={labels.withingsSettingsUserLabel}
@@ -912,6 +947,9 @@ function App() {
           onSync={() => {
             void handleWithingsSync()
           }}
+          onTestNotify={() => {
+            void handleWithingsNotifyTest()
+          }}
           canSync={Boolean(withingsStatus?.connected)}
         />
       ) : null}
@@ -921,6 +959,7 @@ function App() {
           isOpen={isTwitterTemplateDialogOpen}
           isSaving={isTwitterTemplateSaving}
           isConnecting={isTwitterAuthBusy}
+          isPublishing={isTwitterLatestPosting}
           isTesting={isTwitterTestPosting}
           title={labels.twitterTemplateDialogTitle}
           description={labels.twitterTemplateDescription}
@@ -940,6 +979,7 @@ function App() {
                 ? labels.twitterTemplateReauthorize
                 : labels.twitterTemplateReconnect
           }
+          publishLabel={isTwitterLatestPosting ? labels.twitterTemplatePostingLatest : labels.twitterTemplatePostLatest}
           testLabel={isTwitterTestPosting ? labels.twitterTemplateTesting : labels.twitterTemplateTest}
           accountLabel={labels.twitterTemplateAccountLabel}
           accountValue={twitterAccountLabel}
@@ -953,6 +993,9 @@ function App() {
           onSubmit={handleSaveTwitterTemplate}
           onConnect={() => {
             void handleTwitterConnect()
+          }}
+          onPublishLatest={() => {
+            void handleTwitterLatestPost()
           }}
           onTestPost={() => {
             void handleTestTwitterPost()

@@ -11,7 +11,35 @@ import {
 } from './twitter-types'
 import { getStoredTwitterConnection, ensureTwitterPostSettings, upsertTwitterConnection, markTwitterPostPublished } from './twitter-db'
 import { ensureTwitterConnectionReady, hasTwitterWriteScope, hasTwitterMediaWriteScope, refreshTwitterAuthorization } from './twitter-oauth'
-import { nowSeconds } from './utils'
+
+export type CreateTwitterPostResult =
+  | {
+      ok: true
+      tweetId: string | null
+      mode: 'with_image' | 'text_only'
+    }
+  | {
+      ok: false
+      reason:
+        | 'connection_not_found'
+        | 'missing_tweet_write_scope'
+        | 'measurement_not_found'
+        | 'outside_window'
+        | 'already_posted'
+        | 'empty_text'
+        | 'tweet_too_long'
+        | 'missing_media_write_scope'
+        | 'image_upload_failed'
+        | 'chart_generation_failed'
+        | 'post_failed'
+    }
+
+export type PostLatestWithingsMeasurementTweetResult =
+  | CreateTwitterPostResult
+  | {
+      ok: false
+      reason: 'auto_post_disabled'
+    }
 
 function encodeBase64(bytes: Uint8Array) {
   let binary = ''
@@ -236,9 +264,9 @@ function formatTweetTime(epochSec: number) {
 
 function buildTemplateValues(measurement: WithingsMeasurementForTweet) {
   return new Map<string, string>([
-    ['weight', measurement.weightKg === null ? '' : trimTrailingZeros(measurement.weightKg, 1)],
-    ['fat_ratio', measurement.fatRatio === null ? '' : trimTrailingZeros(measurement.fatRatio, 1)],
-    ['bmi', measurement.bmi === null ? '' : trimTrailingZeros(measurement.bmi, 1)],
+    ['weight', measurement.weightKg === null ? '' : trimTrailingZeros(measurement.weightKg, 2)],
+    ['fat_ratio', measurement.fatRatio === null ? '' : trimTrailingZeros(measurement.fatRatio, 2)],
+    ['bmi', measurement.bmi === null ? '' : trimTrailingZeros(measurement.bmi, 2)],
     ['measured_at', `${formatTweetDate(measurement.measuredAt)} ${formatTweetTime(measurement.measuredAt)} JST`],
     ['measured_date', formatTweetDate(measurement.measuredAt)],
     ['measured_time', formatTweetTime(measurement.measuredAt)],
@@ -257,26 +285,54 @@ function renderTwitterTemplate(template: string, measurement: WithingsMeasuremen
     .trim()
 }
 
-async function getLatestWithingsMeasurement(env: Env, userId?: string | null) {
-  const sql = userId
-    ? `
-      SELECT grpid, measured_at, weight_kg, fat_ratio, bmi
-      FROM withings_measurements
-      WHERE userid = ?1
-        AND weight_kg IS NOT NULL
-      ORDER BY measured_at DESC, grpid DESC
-      LIMIT 1
-    `
-    : `
-      SELECT grpid, measured_at, weight_kg, fat_ratio, bmi
-      FROM withings_measurements
-      WHERE weight_kg IS NOT NULL
-      ORDER BY measured_at DESC, grpid DESC
-      LIMIT 1
-    `
+async function getWithingsMeasurementForTweet(
+  env: Env,
+  userId?: string | null,
+  targetGroupId?: number | null,
+) {
+  const hasTargetGroupId = typeof targetGroupId === 'number' && Number.isFinite(targetGroupId)
+  const sql = hasTargetGroupId
+    ? userId
+      ? `
+        SELECT grpid, measured_at, weight_kg, fat_ratio, bmi
+        FROM withings_measurements
+        WHERE userid = ?1
+          AND grpid = ?2
+          AND weight_kg IS NOT NULL
+        LIMIT 1
+      `
+      : `
+        SELECT grpid, measured_at, weight_kg, fat_ratio, bmi
+        FROM withings_measurements
+        WHERE grpid = ?1
+          AND weight_kg IS NOT NULL
+        LIMIT 1
+      `
+    : userId
+      ? `
+        SELECT grpid, measured_at, weight_kg, fat_ratio, bmi
+        FROM withings_measurements
+        WHERE userid = ?1
+          AND weight_kg IS NOT NULL
+        ORDER BY measured_at DESC, grpid DESC
+        LIMIT 1
+      `
+      : `
+        SELECT grpid, measured_at, weight_kg, fat_ratio, bmi
+        FROM withings_measurements
+        WHERE weight_kg IS NOT NULL
+        ORDER BY measured_at DESC, grpid DESC
+        LIMIT 1
+      `
 
   const statement = env.DB.prepare(sql)
-  const query = userId ? statement.bind(userId) : statement
+  const query = hasTargetGroupId
+    ? userId
+      ? statement.bind(userId, targetGroupId)
+      : statement.bind(targetGroupId)
+    : userId
+      ? statement.bind(userId)
+      : statement
   return query
     .first<{
       grpid: number
@@ -298,7 +354,7 @@ async function getLatestWithingsMeasurement(env: Env, userId?: string | null) {
     )
 }
 
-export async function createTwitterPost(env: Env, options: CreateTwitterPostOptions) {
+export async function createTwitterPost(env: Env, options: CreateTwitterPostOptions): Promise<CreateTwitterPostResult> {
   const connection = await getStoredTwitterConnection(env)
   if (!connection) {
     return { ok: false, reason: 'connection_not_found' as const }
@@ -307,7 +363,11 @@ export async function createTwitterPost(env: Env, options: CreateTwitterPostOpti
     return { ok: false, reason: 'missing_tweet_write_scope' as const }
   }
 
-  const measurement = await getLatestWithingsMeasurement(env, options.withingsUserId ?? null)
+  const measurement = await getWithingsMeasurementForTweet(
+    env,
+    options.withingsUserId ?? null,
+    options.targetGroupId ?? null,
+  )
   if (!measurement || measurement.weightKg === null) {
     return { ok: false, reason: 'measurement_not_found' as const }
   }
@@ -372,24 +432,21 @@ export async function createTwitterPost(env: Env, options: CreateTwitterPostOpti
 export async function postLatestWithingsMeasurementTweet(
   env: Env,
   withingsUserId: string,
+  targetGroupId?: number | null,
   minMeasuredAt?: number | null,
   maxMeasuredAt?: number | null,
-) {
+): Promise<PostLatestWithingsMeasurementTweetResult> {
   const settings = await ensureTwitterPostSettings(env)
   if (!settings.autoPostEnabled) {
-    return false
+    return { ok: false, reason: 'auto_post_disabled' }
   }
-  const connection = await getStoredTwitterConnection(env)
-  if (!connection) {
-    return false
-  }
-  const posted = await createTwitterPost(env, {
+  return createTwitterPost(env, {
     template: settings.template,
     withingsUserId,
+    targetGroupId,
     minMeasuredAt,
     maxMeasuredAt,
     updatePostedMarker: true,
     requireImage: true,
   })
-  return posted.ok
 }
