@@ -1,4 +1,4 @@
-import { ChevronUpIcon, Cross2Icon, EyeOpenIcon, GlobeIcon, MoonIcon, Pencil2Icon, PlusIcon, SunIcon } from '@radix-ui/react-icons'
+import { ChevronUpIcon, CopyIcon, Cross2Icon, EyeOpenIcon, GlobeIcon, MoonIcon, Pencil2Icon, PlusIcon, SunIcon } from '@radix-ui/react-icons'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 import { AddGearDialog } from './components/AddGearDialog'
@@ -57,6 +57,17 @@ function App() {
   }, [])
   const typedChars = useTypewriter(introChars)
   const { toast, showToast } = useToast()
+  const handleCopyToast = useCallback(async () => {
+    if (!toast?.message || typeof navigator === 'undefined' || !navigator.clipboard) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(toast.message)
+      showToast(activeLanguage === 'ja' ? 'トースト内容をコピーしました。' : 'Copied the toast message.', 'info')
+    } catch {
+      showToast(activeLanguage === 'ja' ? 'コピーに失敗しました。' : 'Failed to copy the toast message.', 'error')
+    }
+  }, [activeLanguage, showToast, toast])
   const isTypingDone = typedChars.length >= introChars.length
   const titleAreaRef = useRef<HTMLElement | null>(null)
 
@@ -82,6 +93,9 @@ function App() {
     isWithingsConnecting,
     isWithingsSyncing,
     isWithingsNotifyTesting,
+    isWithingsWebhookSubscribing,
+    isWithingsWebhookUnsubscribing,
+    isWithingsWebhookSubscribed,
     selectedWithingsView,
     setSelectedWithingsView,
     isWithingsSettingsDialogOpen,
@@ -100,6 +114,8 @@ function App() {
     handleWithingsConnect,
     handleWithingsSync,
     handleWithingsNotifyTest,
+    handleWithingsWebhookSubscribe,
+    handleWithingsWebhookUnsubscribe,
     handleOpenWithingsSettingsDialog,
     handleCloseWithingsSettingsDialog,
   } = useWithings({
@@ -929,10 +945,20 @@ function App() {
           isConnecting={isWithingsConnecting}
           isSyncing={isWithingsSyncing}
           isTestingNotify={isWithingsNotifyTesting}
+          isSubscribingWebhook={isWithingsWebhookSubscribing}
+          isUnsubscribingWebhook={isWithingsWebhookUnsubscribing}
           title={labels.withingsSettingsDialogTitle}
           description={labels.withingsConnectHint}
           connectLabel={labels.withingsConnectButton}
           syncLabel={labels.withingsSyncButton}
+          subscribeWebhookLabel={
+            isWithingsWebhookSubscribing ? labels.withingsWebhookSubscribingButton : labels.withingsWebhookSubscribeButton
+          }
+          unsubscribeWebhookLabel={
+            isWithingsWebhookUnsubscribing
+              ? labels.withingsWebhookUnsubscribingButton
+              : labels.withingsWebhookUnsubscribeButton
+          }
           notifyTestLabel={isWithingsNotifyTesting ? labels.withingsNotifyTestingButton : labels.withingsNotifyTestButton}
           statusLabel={labels.withingsStatusLabel}
           statusValue={withingsStatusValue}
@@ -947,10 +973,18 @@ function App() {
           onSync={() => {
             void handleWithingsSync()
           }}
+          onSubscribeWebhook={() => {
+            void handleWithingsWebhookSubscribe()
+          }}
+          onUnsubscribeWebhook={() => {
+            void handleWithingsWebhookUnsubscribe()
+          }}
           onTestNotify={() => {
             void handleWithingsNotifyTest()
           }}
           canSync={Boolean(withingsStatus?.connected)}
+          canManageWebhook={Boolean(withingsStatus?.connected)}
+          canUnsubscribeWebhook={Boolean(withingsStatus?.connected) && isWithingsWebhookSubscribed}
         />
       ) : null}
 
@@ -1022,7 +1056,17 @@ function App() {
 
       {toast ? (
         <div className={`app-toast is-${toast.tone}`} role="status" aria-live="polite">
-          {toast.message}
+          <div className="app-toast-row">
+            <p className="app-toast-message">{toast.message}</p>
+            <button
+              type="button"
+              className="app-toast-copy"
+              onClick={() => void handleCopyToast()}
+              aria-label={activeLanguage === 'ja' ? 'トースト内容をコピー' : 'Copy toast message'}
+            >
+              <CopyIcon />
+            </button>
+          </div>
         </div>
       ) : null}
 
