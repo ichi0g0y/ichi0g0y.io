@@ -39,6 +39,8 @@ type AppTheme = 'light' | 'dark'
 type AppThemePreference = AppTheme | 'system'
 const GEAR_PAGE_SIZE = 12
 const WITHINGS_STATUS_CACHE_KEY = 'withings-status-cache-v1'
+const EMPTY_WITHINGS_WORKOUTS: NonNullable<WithingsStatus['recentWorkouts']> = []
+const EMPTY_WITHINGS_WEIGHTS: NonNullable<WithingsStatus['recentWeights']> = []
 
 function detectSystemLocale(): AppLocale {
   if (typeof window === 'undefined') {
@@ -697,8 +699,21 @@ function App() {
       ? labels.withingsStatusConnected
       : labels.withingsStatusPending
   const latestMeasurement = withingsStatus?.latestMeasurement ?? null
-  const recentWorkouts = withingsStatus?.recentWorkouts ?? []
-  const recentWeights = withingsStatus?.recentWeights ?? []
+  const recentWorkouts = withingsStatus?.recentWorkouts ?? EMPTY_WITHINGS_WORKOUTS
+  const recentWeights = withingsStatus?.recentWeights ?? EMPTY_WITHINGS_WEIGHTS
+  const withingsTrendLabels = useMemo(
+    () => ({
+      title: labels.withingsTrendTitle,
+      noData: labels.withingsTrendNoData,
+      range7: labels.withingsRange7,
+      range30: labels.withingsRange30,
+      range90: labels.withingsRange90,
+      weight: labels.withingsChartWeight,
+      bmi: labels.withingsChartBmi,
+      fatRatio: labels.withingsChartFatRatio,
+    }),
+    [labels],
+  )
   const latestWeightLabel = formatWeightKg(latestMeasurement?.weightKg)
   const latestFatRatioLabel = formatFatRatio(latestMeasurement?.fatRatio)
   const latestBmiLabel = formatBmi(latestMeasurement?.bmi)
@@ -1876,16 +1891,7 @@ function App() {
               <WithingsTrendChart
                 points={recentWeights}
                 locale={activeLanguage}
-                labels={{
-                  title: labels.withingsTrendTitle,
-                  noData: labels.withingsTrendNoData,
-                  range7: labels.withingsRange7,
-                  range30: labels.withingsRange30,
-                  range90: labels.withingsRange90,
-                  weight: labels.withingsChartWeight,
-                  bmi: labels.withingsChartBmi,
-                  fatRatio: labels.withingsChartFatRatio,
-                }}
+                labels={withingsTrendLabels}
               />
               {latestMeasurement?.measuredAt ? null : <p className="withings-empty-note">{labels.withingsNoMeasurement}</p>}
             </>
