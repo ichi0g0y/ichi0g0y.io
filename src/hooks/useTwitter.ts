@@ -6,7 +6,7 @@ import { getTwitterAuthErrorMessage } from '../utils'
 export const DEFAULT_TWITTER_TEMPLATE = '体重 {{weight}}kg / 体脂肪率 {{fat_ratio}}% / BMI {{bmi}}\n{{measured_at}}'
 export const TWITTER_TEMPLATE_KEYS = ['weight', 'fat_ratio', 'bmi', 'measured_at', 'measured_date', 'measured_time', 'timestamp'] as const
 
-export function trimTemplateNumber(value: number | null | undefined, fractionDigits = 1) {
+export function trimTemplateNumber(value: number | null | undefined, fractionDigits = 2) {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return ''
   }

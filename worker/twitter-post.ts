@@ -264,9 +264,9 @@ function formatTweetTime(epochSec: number) {
 
 function buildTemplateValues(measurement: WithingsMeasurementForTweet) {
   return new Map<string, string>([
-    ['weight', measurement.weightKg === null ? '' : trimTrailingZeros(measurement.weightKg, 1)],
-    ['fat_ratio', measurement.fatRatio === null ? '' : trimTrailingZeros(measurement.fatRatio, 1)],
-    ['bmi', measurement.bmi === null ? '' : trimTrailingZeros(measurement.bmi, 1)],
+    ['weight', measurement.weightKg === null ? '' : trimTrailingZeros(measurement.weightKg, 2)],
+    ['fat_ratio', measurement.fatRatio === null ? '' : trimTrailingZeros(measurement.fatRatio, 2)],
+    ['bmi', measurement.bmi === null ? '' : trimTrailingZeros(measurement.bmi, 2)],
     ['measured_at', `${formatTweetDate(measurement.measuredAt)} ${formatTweetTime(measurement.measuredAt)} JST`],
     ['measured_date', formatTweetDate(measurement.measuredAt)],
     ['measured_time', formatTweetTime(measurement.measuredAt)],

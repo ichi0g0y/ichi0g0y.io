@@ -1,5 +1,5 @@
 import { ChevronUpIcon, Cross2Icon, EyeOpenIcon, GlobeIcon, MoonIcon, Pencil2Icon, PlusIcon, SunIcon } from '@radix-ui/react-icons'
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 import { AddGearDialog } from './components/AddGearDialog'
 import { AuthDialog } from './components/AuthDialog'
@@ -148,6 +148,36 @@ function App() {
     formatWithingsMeasuredAt,
   })
 
+  const handleOpenWithingsSettingsDialogExclusive = useCallback(() => {
+    if (isTwitterTemplateDialogOpen && (isTwitterTemplateSaving || isTwitterLatestPosting || isTwitterTestPosting)) {
+      return
+    }
+    handleCloseTwitterTemplateDialog()
+    handleOpenWithingsSettingsDialog()
+  }, [
+    handleCloseTwitterTemplateDialog,
+    handleOpenWithingsSettingsDialog,
+    isTwitterLatestPosting,
+    isTwitterTemplateDialogOpen,
+    isTwitterTemplateSaving,
+    isTwitterTestPosting,
+  ])
+
+  const handleOpenTwitterTemplateDialogExclusive = useCallback(() => {
+    if (isWithingsSettingsDialogOpen && (isWithingsConnecting || isWithingsSyncing || isWithingsNotifyTesting)) {
+      return
+    }
+    handleCloseWithingsSettingsDialog()
+    handleOpenTwitterTemplateDialog()
+  }, [
+    handleCloseWithingsSettingsDialog,
+    handleOpenTwitterTemplateDialog,
+    isWithingsConnecting,
+    isWithingsNotifyTesting,
+    isWithingsSettingsDialogOpen,
+    isWithingsSyncing,
+  ])
+
   const {
     isGearLoading,
     isAddFormOpen,
@@ -222,7 +252,6 @@ function App() {
     isModeToggleLocked,
     categoryOptions,
     categoryEnByCategory,
-    editCategoryDisplayOptions,
     categoryDisplayMap,
     filteredGearItems,
     visibleFilteredGearItems,
@@ -338,7 +367,7 @@ function App() {
           <button
             className="mode-toggle-button"
             type="button"
-            onClick={handleOpenWithingsSettingsDialog}
+            onClick={handleOpenWithingsSettingsDialogExclusive}
             disabled={isWithingsConnecting || isWithingsLoading}
           >
             <span>{labels.withingsSettingsButton}</span>
@@ -349,7 +378,7 @@ function App() {
           <button
             className="mode-toggle-button"
             type="button"
-            onClick={handleOpenTwitterTemplateDialog}
+            onClick={handleOpenTwitterTemplateDialogExclusive}
             disabled={isTwitterTemplateSaving || isTwitterStatusLoading}
             aria-label={labels.twitterTemplateEditAria}
           >
@@ -835,7 +864,7 @@ function App() {
           editDescriptionEn={editDescriptionEn}
           editCategory={editCategory}
           editCategoryLabel={activeLanguage === 'en' ? categoryEnByCategory.get(editCategory) ?? editCategory : editCategory}
-          categoryDisplayOptions={editCategoryDisplayOptions}
+          categoryOptions={categoryOptions}
           editImageUrls={editImageUrls}
           editImageUrlInput={editImageUrlInput}
           editImageCandidates={editImageCandidates}

@@ -111,6 +111,34 @@ type WithingsNotifyProcessResult = {
   subscriptionRepair: NotifySubscriptionRepairResult
 }
 
+const DEFAULT_SUBSCRIPTION_REPAIR: NotifySubscriptionRepairResult = {
+  attempted: false,
+  repaired: false,
+  callbackUrl: null,
+  usedFallback: false,
+  error: null,
+  failedApplis: [],
+}
+
+function buildNotifyResult(
+  authMode: WithingsNotifyAuthMode,
+  overrides: Partial<Omit<WithingsNotifyProcessResult, 'authMode'>>,
+): WithingsNotifyProcessResult {
+  return {
+    ok: false,
+    authMode,
+    payloadUserMatched: false,
+    syncOk: false,
+    latestNewWeightMeasurement: null,
+    tweetAttempted: false,
+    tweetPosted: false,
+    tweetResult: null,
+    skipReason: null,
+    subscriptionRepair: DEFAULT_SUBSCRIPTION_REPAIR,
+    ...overrides,
+  }
+}
+
 function normalizeNotifyCallbackPath(rawUrl: string) {
   const url = new URL(rawUrl)
   const pathname = url.pathname.length > 1 && url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname
@@ -183,120 +211,61 @@ async function processWithingsNotify(
 ): Promise<WithingsNotifyProcessResult> {
   const connection = await ensureConnectionReady(env)
   if (!connection) {
-    return {
-      ok: false,
-      authMode: options.authMode,
-      payloadUserMatched: false,
-      syncOk: false,
-      latestNewWeightMeasurement: null,
-      tweetAttempted: false,
-      tweetPosted: false,
-      tweetResult: null,
-      skipReason: 'connection_not_found',
-      subscriptionRepair: {
-        attempted: false,
-        repaired: false,
-        callbackUrl: null,
-        usedFallback: false,
-        error: null,
-        failedApplis: [],
-      },
-    }
+    return buildNotifyResult(options.authMode, { skipReason: 'connection_not_found' })
   }
 
   if (payload.userId && payload.userId !== connection.userId) {
-    return {
-      ok: false,
-      authMode: options.authMode,
-      payloadUserMatched: false,
-      syncOk: false,
-      latestNewWeightMeasurement: null,
-      tweetAttempted: false,
-      tweetPosted: false,
-      tweetResult: null,
+    return buildNotifyResult(options.authMode, {
       skipReason: 'payload_user_mismatch',
-      subscriptionRepair: {
-        attempted: false,
-        repaired: false,
-        callbackUrl: connection.notifyCallbackUrl,
-        usedFallback: false,
-        error: null,
-        failedApplis: [],
-      },
-    }
+      subscriptionRepair: { ...DEFAULT_SUBSCRIPTION_REPAIR, callbackUrl: connection.notifyCallbackUrl },
+    })
   }
 
   const synced = await syncMeasurements(env, connection, payload.startDate, payload.endDate)
   const repairConnection = options.repairSubscription ? await ensureConnectionReady(env) : connection
   const subscriptionRepair = options.repairSubscription && repairConnection
     ? await repairNotifySubscriptionIfNeeded(request, env, repairConnection)
-    : {
-        attempted: false,
-        repaired: false,
-        callbackUrl: connection.notifyCallbackUrl,
-        usedFallback: false,
-        error: null,
-        failedApplis: [],
-      }
+    : { ...DEFAULT_SUBSCRIPTION_REPAIR, callbackUrl: connection.notifyCallbackUrl }
 
   if (!synced.ok) {
-    return {
-      ok: false,
-      authMode: options.authMode,
+    return buildNotifyResult(options.authMode, {
       payloadUserMatched: true,
-      syncOk: false,
       latestNewWeightMeasurement: synced.latestNewWeightMeasurement,
-      tweetAttempted: false,
-      tweetPosted: false,
-      tweetResult: null,
       skipReason: 'sync_failed',
       subscriptionRepair,
-    }
+    })
   }
 
   if (payload.appli !== WITHINGS_NOTIFY_APPLI_MEASURE) {
-    return {
+    return buildNotifyResult(options.authMode, {
       ok: true,
-      authMode: options.authMode,
       payloadUserMatched: true,
       syncOk: true,
       latestNewWeightMeasurement: synced.latestNewWeightMeasurement,
-      tweetAttempted: false,
-      tweetPosted: false,
-      tweetResult: null,
       skipReason: 'non_measure_notify',
       subscriptionRepair,
-    }
+    })
   }
 
   if (!synced.latestNewWeightMeasurement) {
-    return {
+    return buildNotifyResult(options.authMode, {
       ok: true,
-      authMode: options.authMode,
       payloadUserMatched: true,
       syncOk: true,
-      latestNewWeightMeasurement: null,
-      tweetAttempted: false,
-      tweetPosted: false,
-      tweetResult: null,
       skipReason: 'no_new_weight_measurement',
       subscriptionRepair,
-    }
+    })
   }
 
   if (options.dryRun) {
-    return {
+    return buildNotifyResult(options.authMode, {
       ok: true,
-      authMode: options.authMode,
       payloadUserMatched: true,
       syncOk: true,
       latestNewWeightMeasurement: synced.latestNewWeightMeasurement,
-      tweetAttempted: false,
-      tweetPosted: false,
-      tweetResult: null,
       skipReason: 'dry_run',
       subscriptionRepair,
-    }
+    })
   }
 
   const tweetResult = await postLatestWithingsMeasurementTweet(
@@ -307,18 +276,16 @@ async function processWithingsNotify(
     synced.latestNewWeightMeasurement.measuredAt,
   )
 
-  return {
+  return buildNotifyResult(options.authMode, {
     ok: tweetResult.ok,
-    authMode: options.authMode,
     payloadUserMatched: true,
     syncOk: true,
     latestNewWeightMeasurement: synced.latestNewWeightMeasurement,
     tweetAttempted: true,
     tweetPosted: tweetResult.ok,
     tweetResult,
-    skipReason: null,
     subscriptionRepair,
-  }
+  })
 }
 
 function buildSimulatedNotifyMessage(result: WithingsNotifyProcessResult) {
