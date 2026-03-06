@@ -22,9 +22,10 @@ interface D1Result<T> {
   success?: boolean
 }
 
-const DATABASE_NAME = 'ichi0g0y-io'
+const DATABASE_NAME = 'DB'
 const PROD_BUCKET_NAME = 'ichi0g0y-io'
 const DEV_BUCKET_NAME = 'ichi0g0y-io'
+const REMOTE_BUCKET_NAME = 'ichi0g0y-io-remote'
 const MANAGED_IMAGE_PATH = /^\/api\/images\/([A-Za-z0-9_-]{10,})$/
 const NAKED_IMAGE_KEY_PATH = /^\/([A-Za-z0-9_-]{10,})$/
 const PROD_PUBLIC_BASE_URL = 'https://s3.ichi0g0y.io'
@@ -132,7 +133,7 @@ function resolvePublicBaseUrl(mode: Mode, env: string | null) {
   if (mode === 'local') {
     return null
   }
-  if (env === 'dev') {
+  if (env === 'dev' || env === 'remote') {
     return null
   }
   return PROD_PUBLIC_BASE_URL
@@ -301,7 +302,7 @@ async function main() {
   const mode = parseMode(args)
   const env = parseEnv(args)
   const limit = parseLimit(args)
-  const bucketName = env === 'dev' ? DEV_BUCKET_NAME : PROD_BUCKET_NAME
+  const bucketName = env === 'remote' ? REMOTE_BUCKET_NAME : env === 'dev' ? DEV_BUCKET_NAME : PROD_BUCKET_NAME
 
   const ensureImagesSchemaSql = `
     CREATE TABLE IF NOT EXISTS images (

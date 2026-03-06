@@ -23,7 +23,7 @@
   }
 
   .twitch-zone {
-    width: min(420px, 84vw);
+    width: min(720px, calc(100% - 1.2rem));
   }
 
   .twitch-wide-card {
@@ -31,11 +31,11 @@
   }
 
   .card {
-    width: min(420px, 84vw);
+    width: min(560px, calc(100% - 1.2rem));
   }
 
   .gear-zone {
-    width: min(420px, 84vw);
+    width: min(720px, calc(100% - 1.2rem));
     padding: 0.85rem;
   }
 
@@ -82,4 +82,5 @@
   .twitch-main {
     width: 100%;
   }
+
 }
