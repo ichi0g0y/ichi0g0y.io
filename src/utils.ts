@@ -51,6 +51,25 @@ export function getAuthErrorMessage(errorCode: string) {
   }
 }
 
+export function getWithingsErrorMessage(errorCode: string) {
+  switch (errorCode) {
+    case 'withings_oauth_denied':
+      return 'Withings連携がキャンセルされました。'
+    case 'withings_state_mismatch':
+      return 'Withings連携の整合性チェックに失敗しました。再試行してください。'
+    case 'withings_token_exchange_failed':
+      return 'Withingsトークンの取得に失敗しました。'
+    case 'withings_notify_subscribe_failed':
+      return 'Withings通知(Webhook)の登録に失敗しました。計測データ同期は継続できます。'
+    case 'withings_sync_failed':
+      return 'Withingsデータの初回同期に失敗しました。'
+    case 'withings_config_error':
+      return 'Withingsの設定が不足しています。'
+    default:
+      return 'Withings連携に失敗しました。'
+  }
+}
+
 export function normalizeImageFit(value: unknown): GearItem['imageFit'] {
   return value === 'cover' ? 'cover' : 'contain'
 }

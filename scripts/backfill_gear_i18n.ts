@@ -21,7 +21,7 @@ interface Translation {
   descriptionEn: string | null
 }
 
-const DATABASE_NAME = 'ichi0g0y-io'
+const DATABASE_NAME = 'DB'
 const DEFAULT_MODEL = 'gpt-4.1-mini'
 const TRANSLATE_TIMEOUT_MS = 15_000
 
@@ -34,6 +34,15 @@ function parseMode(args: string[]): Mode {
 
 function hasDryRun(args: string[]) {
   return args.includes('--dry-run')
+}
+
+function parseEnv(args: string[]) {
+  const envIndex = args.findIndex((arg) => arg === '--env')
+  if (envIndex < 0) {
+    return null
+  }
+  const env = args[envIndex + 1]
+  return env?.trim() || null
 }
 
 function normalizeText(value: unknown): string | null {
@@ -57,9 +66,12 @@ function sqlString(value: string | null) {
   return `'${value.replaceAll("'", "''")}'`
 }
 
-async function runWranglerD1<T>(mode: Mode, sql: string): Promise<D1JsonResult<T>> {
+async function runWranglerD1<T>(mode: Mode, env: string | null, sql: string): Promise<D1JsonResult<T>> {
   const wranglerBin = `${process.cwd()}/node_modules/.bin/wrangler`
   const args = ['d1', 'execute', DATABASE_NAME, mode === 'remote' ? '--remote' : '--local', '--json', '--command', sql]
+  if (env) {
+    args.push('--env', env)
+  }
   const proc = Bun.spawn([wranglerBin, ...args], {
     stdout: 'pipe',
     stderr: 'pipe',
@@ -76,7 +88,7 @@ async function runWranglerD1<T>(mode: Mode, sql: string): Promise<D1JsonResult<T
   return parsed[0] ?? {}
 }
 
-async function fetchRowsToBackfill(mode: Mode): Promise<GearRow[]> {
+async function fetchRowsToBackfill(mode: Mode, env: string | null): Promise<GearRow[]> {
   const sql = `
     SELECT id, title, category, description, title_en, category_en, description_en
     FROM gear_items
@@ -86,7 +98,7 @@ async function fetchRowsToBackfill(mode: Mode): Promise<GearRow[]> {
       description_en IS NULL OR TRIM(description_en) = '' OR LOWER(TRIM(description_en)) = 'null'
     ORDER BY sort_order ASC, id ASC
   `
-  const result = await runWranglerD1<GearRow>(mode, sql)
+  const result = await runWranglerD1<GearRow>(mode, env, sql)
   return (result.results ?? []).map((row) => ({
     ...row,
     description: normalizeText(row.description),
@@ -163,6 +175,7 @@ async function translateWithOpenAI(
 
 async function updateRow(
   mode: Mode,
+  env: string | null,
   rowId: number,
   nextValues: { titleEn: string | null; categoryEn: string | null; descriptionEn: string | null },
 ) {
@@ -175,13 +188,14 @@ async function updateRow(
       updated_at = strftime('%s', 'now')
     WHERE id = ${rowId}
   `
-  await runWranglerD1(mode, sql)
+  await runWranglerD1(mode, env, sql)
 }
 
 async function main() {
   const args = Bun.argv.slice(2)
   const mode = parseMode(args)
   const dryRun = hasDryRun(args)
+  const env = parseEnv(args)
   const apiKey = process.env.OPENAI_API_KEY?.trim()
   const model = process.env.OPENAI_MODEL?.trim() || DEFAULT_MODEL
 
@@ -189,13 +203,13 @@ async function main() {
     throw new Error('OPENAI_API_KEY が未設定です。.dev.vars を読み込んで実行してください。')
   }
 
-  const rows = await fetchRowsToBackfill(mode)
+  const rows = await fetchRowsToBackfill(mode, env)
   if (rows.length < 1) {
-    console.log(`[backfill] 対象なし mode=${mode}`)
+    console.log(`[backfill] 対象なし mode=${mode} env=${env ?? '(default)'}`)
     return
   }
 
-  console.log(`[backfill] mode=${mode} target_rows=${rows.length} dry_run=${dryRun}`)
+  console.log(`[backfill] mode=${mode} env=${env ?? '(default)'} target_rows=${rows.length} dry_run=${dryRun}`)
 
   let translatedCount = 0
   let updatedCount = 0
@@ -223,7 +237,7 @@ async function main() {
     }
 
     if (!dryRun) {
-      await updateRow(mode, row.id, {
+      await updateRow(mode, env, row.id, {
         titleEn: nextTitleEn,
         categoryEn: nextCategoryEn,
         descriptionEn: nextDescriptionEn,
@@ -242,7 +256,7 @@ async function main() {
       category_en IS NULL OR TRIM(category_en) = '' OR LOWER(TRIM(category_en)) = 'null' OR
       description_en IS NULL OR TRIM(description_en) = '' OR LOWER(TRIM(description_en)) = 'null'
   `
-  const remainResult = await runWranglerD1<{ missing_count: number }>(mode, remainSql)
+  const remainResult = await runWranglerD1<{ missing_count: number }>(mode, env, remainSql)
   const missingCount = Number(remainResult.results?.[0]?.missing_count ?? 0)
 
   console.log(

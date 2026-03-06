@@ -12,14 +12,23 @@ import {
 import { handleGetImageById } from './image-store'
 import type { Env } from './types'
 import { appendCorsHeaders, errorResponse, preflightResponse } from './utils'
+import {
+  handleWithingsAuthCallback,
+  handleWithingsAuthStart,
+  handleWithingsNotify,
+  handleWithingsStatus,
+  handleWithingsSync,
+} from './withings'
 
 function isApiRequest(pathname: string) {
   return pathname.startsWith('/api/')
 }
 
-async function routeApi(request: Request, env: Env) {
+async function routeApi(request: Request, env: Env, ctx?: ExecutionContext) {
   const url = new URL(request.url)
   const pathname = url.pathname
+  const pathnameWithoutTrailingSlash =
+    pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname
   const method = request.method.toUpperCase()
 
   if (method === 'OPTIONS') {
@@ -44,6 +53,21 @@ async function routeApi(request: Request, env: Env) {
 
   if (method === 'GET' && pathname === '/api/preview') {
     return handlePreview(request)
+  }
+
+  if (method === 'GET' && pathname === '/api/withings/status') {
+    return handleWithingsStatus(env)
+  }
+
+  if (
+    (method === 'GET' || method === 'POST' || method === 'HEAD') &&
+    pathnameWithoutTrailingSlash === '/api/withings/auth/callback'
+  ) {
+    return handleWithingsAuthCallback(request, env, ctx)
+  }
+
+  if ((method === 'GET' || method === 'POST' || method === 'HEAD') && pathnameWithoutTrailingSlash === '/api/withings/notify') {
+    return handleWithingsNotify(request, env, ctx)
   }
 
   if ((method === 'GET' || method === 'HEAD') && pathname.startsWith('/api/images/')) {
@@ -106,15 +130,31 @@ async function routeApi(request: Request, env: Env) {
     return handleDeleteGearItem(request, env)
   }
 
+  if (method === 'POST' && pathname === '/api/admin/withings/connect') {
+    const auth = await requireAuth(request, env)
+    if (!auth) {
+      return errorResponse('認証が必要です', 401)
+    }
+    return handleWithingsAuthStart(request, env)
+  }
+
+  if (method === 'POST' && pathname === '/api/admin/withings/sync') {
+    const auth = await requireAuth(request, env)
+    if (!auth) {
+      return errorResponse('認証が必要です', 401)
+    }
+    return handleWithingsSync(env, request)
+  }
+
   return errorResponse('APIが見つかりません', 404)
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url)
 
     if (isApiRequest(url.pathname)) {
-      const response = await routeApi(request, env)
+      const response = await routeApi(request, env, ctx)
       return appendCorsHeaders(response, request, env)
     }
 

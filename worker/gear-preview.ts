@@ -81,6 +81,13 @@ function isAmazonHost(hostname: string) {
   return hostname === 'amzn.asia' || hostname.includes('amazon.')
 }
 
+function isUnsupportedAmazonImageUrl(url: URL) {
+  if (!isAmazonHost(url.hostname)) {
+    return false
+  }
+  return url.pathname.startsWith('/api/images/')
+}
+
 function isAmazonGenericText(value: string | null) {
   if (!value) {
     return false
@@ -313,8 +320,12 @@ export function collectImageCandidates(html: string, base: URL, primaryImageUrl:
       if (seen.has(url)) {
         continue
       }
-      const protocol = new URL(url).protocol
+      const parsed = new URL(url)
+      const protocol = parsed.protocol
       if (!['http:', 'https:'].includes(protocol)) {
+        continue
+      }
+      if (isUnsupportedAmazonImageUrl(parsed)) {
         continue
       }
       seen.add(url)

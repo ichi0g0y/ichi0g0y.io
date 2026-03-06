@@ -39,6 +39,45 @@ tasks:
         bun run dev -- --port "$WEB_PORT"
         '
 
+  dev:remote:web:
+    desc: リモートWorker用のフロントエンド開発サーバーのみ起動
+    deps:
+      - install
+    cmds:
+      - |
+        zsh -lc '
+        WEB_PORT="$(awk -F= '\''/^APP_ORIGIN=/{print $2}'\'' .dev.vars 2>/dev/null | sed -E '\''s#.*:([0-9]+).*#\1#'\'' | tail -n1)"
+        if [ -z "$WEB_PORT" ]; then
+          WEB_PORT=5173
+        fi
+        bun run dev -- --port "$WEB_PORT"
+        '
+
+  dev:remote:web:noinstall:
+    desc: リモートWorker用のフロントエンド開発サーバーのみ起動（installスキップ）
+    cmds:
+      - |
+        zsh -lc '
+        WEB_PORT="$(awk -F= '\''/^APP_ORIGIN=/{print $2}'\'' .dev.vars 2>/dev/null | sed -E '\''s#.*:([0-9]+).*#\1#'\'' | tail -n1)"
+        if [ -z "$WEB_PORT" ]; then
+          WEB_PORT=5173
+        fi
+        bun run dev -- --port "$WEB_PORT"
+        '
+
+  dev:remote:
+    desc: 開発サーバー（Web + Worker API(remote)）をtmuxセッションで起動
+    deps:
+      - install
+    cmds:
+      - task dev:remote:kill
+      - bash ./scripts/dev_remote_tmux.sh
+
+  dev:remote:kill:
+    desc: remote開発用のtmuxセッションを終了
+    cmds:
+      - bash ./scripts/dev_remote_tmux_kill.sh
+
   worker:dev:
     desc: Cloudflare Workers APIをローカル起動
     aliases:
@@ -48,6 +87,31 @@ tasks:
     cmds:
       - mkdir -p dist
       - bun run worker:dev
+
+  worker:dev:remote:
+    desc: Cloudflare Workers APIをリモート起動
+    aliases:
+      - worker-dev-remote
+    deps:
+      - install
+    cmds:
+      - mkdir -p dist
+      - bun run worker:dev:remote
+
+  worker:dev:remote:noinstall:
+    desc: Cloudflare Workers APIをリモート起動（installスキップ）
+    cmds:
+      - mkdir -p dist
+      - bun run worker:dev:remote
+
+  worker:tail:remote:
+    desc: Cloudflare Workers(remote)のログをtail表示
+    aliases:
+      - worker-tail-remote
+    deps:
+      - install
+    cmds:
+      - bunx wrangler tail --env remote
 
   d1:migrate:local:
     desc: D1マイグレーションをローカル適用
@@ -66,6 +130,24 @@ tasks:
       - install
     cmds:
       - bun run d1:migrate:remote
+
+  withings:analyze:local:
+    desc: Withingsの保存measure typeをローカルD1で解析
+    aliases:
+      - withings-analyze-local
+    deps:
+      - install
+    cmds:
+      - bun run withings:analyze:local
+
+  withings:analyze:remote:
+    desc: Withingsの保存measure typeをリモートD1で解析
+    aliases:
+      - withings-analyze-remote
+    deps:
+      - install
+    cmds:
+      - bun run withings:analyze:remote
 
   images:backfill:r2:local:
     desc: 既存画像をローカルR2へバックフィル
@@ -93,10 +175,10 @@ tasks:
       - install
     cmds:
       - mkdir -p .context
-      - bunx wrangler d1 export ichi0g0y-io --local --table gear_items --output .context/d1_local_data.sql --no-schema
+      - bunx wrangler d1 export DB --local --table gear_items --output .context/d1_local_data.sql --no-schema
       - bun run d1:migrate:remote
-      - bunx wrangler d1 execute ichi0g0y-io --remote --command "DELETE FROM gear_items; DELETE FROM sqlite_sequence WHERE name='gear_items';"
-      - bunx wrangler d1 execute ichi0g0y-io --remote --file .context/d1_local_data.sql
+      - bunx wrangler d1 execute DB --remote --env remote --command "DELETE FROM gear_items; DELETE FROM sqlite_sequence WHERE name='gear_items';"
+      - bunx wrangler d1 execute DB --remote --env remote --file .context/d1_local_data.sql
 
   worker:deploy:
     desc: Workersへデプロイ
@@ -144,3 +226,10 @@ tasks:
       - build
     cmds:
       - bash ./scripts/push_prod_env_to_remote.sh
+
+  env:push:remote:
+    desc: .dev.vars をCloudflare remote環境へ反映（workers.dev固定URL + deploy）
+    deps:
+      - install
+    cmds:
+      - bash ./scripts/push_remote_env_to_remote.sh
