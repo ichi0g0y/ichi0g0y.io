@@ -6,13 +6,16 @@
   "scripts": {
     "dev": "vite",
     "worker:dev": "mkdir -p dist && wrangler dev --local --env dev --port 8787",
+    "worker:dev:remote": "mkdir -p dist && wrangler dev --remote --env remote --port 8787",
     "worker:deploy": "wrangler deploy",
-    "d1:migrate:local": "wrangler d1 migrations apply ichi0g0y-io --local",
-    "d1:migrate:remote": "wrangler d1 migrations apply ichi0g0y-io --remote",
+    "d1:migrate:local": "wrangler d1 migrations apply DB --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply DB --remote --env remote",
     "d1:backfill:i18n:local": "bun --env-file .dev.vars scripts/backfill_gear_i18n.ts --local",
-    "d1:backfill:i18n:remote": "bun --env-file .dev.vars scripts/backfill_gear_i18n.ts --remote",
+    "d1:backfill:i18n:remote": "bun --env-file .dev.vars scripts/backfill_gear_i18n.ts --remote --env remote",
+    "withings:analyze:local": "bun scripts/analyze_withings_measures.ts --local",
+    "withings:analyze:remote": "bun scripts/analyze_withings_measures.ts --remote --env remote",
     "images:backfill:r2:local": "bun scripts/backfill_gear_images_to_r2.ts --local",
-    "images:backfill:r2:remote": "bun scripts/backfill_gear_images_to_r2.ts --remote",
+    "images:backfill:r2:remote": "bun scripts/backfill_gear_images_to_r2.ts --remote --env remote",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -21,7 +24,8 @@
     "@radix-ui/react-icons": "^1.3.2",
     "cmdk": "^1.1.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "recharts": "^3.7.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260301.1",
@@ -31,7 +35,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
-    "esbuild": "^0.25.11",
+    "esbuild": "^0.27.3",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
@@ -40,6 +44,6 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
     "vite": "^7.3.1",
-    "wrangler": "^4.69.0"
+    "wrangler": "4.70.0"
   }
 }
