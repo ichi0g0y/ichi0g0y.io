@@ -10,6 +10,14 @@ export interface Env {
   OPENAI_MODEL?: string
   APP_ORIGIN?: string
   R2_PUBLIC_BASE_URL?: string
+  WITHINGS_CLIENT_ID?: string
+  WITHINGS_CLIENT_SECRET?: string
+  WITHINGS_NOTIFY_SECRET?: string
+  WITHINGS_PUBLIC_ORIGIN?: string
+  WITHINGS_CALLBACK_URL?: string
+  WITHINGS_NOTIFY_CALLBACK_URL?: string
+  WITHINGS_OAUTH_SCOPE?: string
+  WITHINGS_USER_HEIGHT_M?: string
 }
 
 export interface AccessTokenPayload {

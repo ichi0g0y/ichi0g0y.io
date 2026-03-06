@@ -1,0 +1,452 @@
+.withings-zone {
+  margin: 2rem auto 0;
+  width: min(928px, calc(100% - 2rem));
+}
+
+.withings-card {
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 1rem 1.1rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.withings-header {
+  margin: 0 0 1rem;
+  text-align: center;
+}
+
+.withings-heading {
+  margin: 0;
+  font-size: clamp(1.2rem, 3vw, 1.38rem);
+  color: #111111;
+}
+
+.withings-status {
+  margin: 0.3rem 0 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.36rem;
+  font-size: 0.8rem;
+}
+
+.withings-status-label {
+  color: #6b7280;
+}
+
+.withings-status-value {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #d5dbe4;
+  background: #f8fafc;
+  color: #334155;
+  padding: 0.12rem 0.48rem;
+}
+
+.withings-status-value.is-connected {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.withings-summary {
+  margin-top: 0.72rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem 0.9rem;
+}
+
+.withings-summary-item {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.withings-summary-skeleton {
+  margin-top: 0;
+}
+
+.withings-description {
+  margin: 0.35rem 0 0;
+  font-size: clamp(0.9rem, 2.2vw, 0.98rem);
+  line-height: 1.5;
+  color: #6b7280;
+}
+
+.withings-metrics {
+  margin-top: 0.72rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.withings-workout-metrics {
+  margin-top: 0.28rem;
+  gap: 1rem 0.76rem;
+}
+
+.withings-metric.withings-workout-metric {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  gap: 0.14rem;
+}
+
+.withings-metrics-title {
+  margin: 0.7rem 0 0;
+  font-size: 0.76rem;
+  color: #6b7280;
+}
+
+.withings-summary-label {
+  font-size: 0.76rem;
+  color: #6b7280;
+}
+
+.withings-workout-label {
+  font-size: 0.76rem;
+  color: #6b7280;
+}
+
+.withings-trend {
+  margin-top: 0.72rem;
+  padding: 0;
+  --withings-tooltip-bg: #ffffff;
+  --withings-tooltip-text: #0f172a;
+  --withings-tooltip-shadow: 0 14px 28px -16px rgba(15, 23, 42, 0.5);
+  --withings-weight-label-color: #0c4a6e;
+}
+
+.withings-trend-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.62rem;
+}
+
+.withings-trend-head .withings-metrics-title {
+  margin: 0;
+}
+
+.withings-trend-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0;
+}
+
+.withings-range-button {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.12rem 0.4rem;
+  cursor: pointer;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.withings-range-button:hover {
+  opacity: 0.75;
+}
+
+.withings-range-button.is-active {
+  color: #0f172a;
+  text-decoration: underline;
+  text-underline-offset: 0.22rem;
+}
+
+.withings-trend-chart {
+  margin-top: 0.55rem;
+}
+
+.withings-trend-legend {
+  margin-top: 0.38rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.48rem 1rem;
+}
+
+.withings-trend-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36rem;
+}
+
+.withings-trend-legend-line {
+  width: 1.18rem;
+  height: 0;
+  border-top: 2px solid transparent;
+}
+
+.withings-trend-legend-line.is-weight {
+  border-top-color: #0ea5e9;
+}
+
+.withings-trend-legend-line.is-fat-ratio {
+  border-top-color: #f97316;
+}
+
+.withings-trend-legend-line.is-bmi {
+  border-top-color: #22c55e;
+  border-top-style: dashed;
+}
+
+.withings-trend-legend-text {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.withings-trend-chart .recharts-wrapper:focus,
+.withings-trend-chart .recharts-wrapper:focus-visible,
+.withings-trend-chart .recharts-surface:focus,
+.withings-trend-chart .recharts-surface:focus-visible {
+  outline: none;
+}
+
+.withings-metric {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.58rem 0.66rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.withings-metric-label {
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+
+.withings-metric-value {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.withings-empty-note {
+  margin: 0.62rem 0 0;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.withings-loading-skeleton {
+  margin-top: 0.08rem;
+}
+
+.withings-trend-skeleton {
+  margin-top: 0.72rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.withings-skeleton-line {
+  display: block;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e5e7eb 20%, #f3f4f6 45%, #e5e7eb 70%);
+  background-size: 220% 100%;
+  animation: withings-skeleton-shimmer 1.3s ease-in-out infinite;
+}
+
+.withings-skeleton-line.is-label {
+  width: 6.2rem;
+  height: 0.68rem;
+}
+
+.withings-skeleton-line.is-value {
+  width: 8.8rem;
+  height: 1rem;
+}
+
+.withings-skeleton-line.is-title {
+  width: 7.6rem;
+  height: 0.76rem;
+}
+
+.withings-skeleton-line.is-chart {
+  width: 100%;
+  height: 15.5rem;
+  border-radius: 12px;
+}
+
+@keyframes withings-skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.withings-connect-hint {
+  margin: 0.52rem 0 0;
+  font-size: 0.76rem;
+  color: #94a3b8;
+}
+
+.withings-actions {
+  margin-top: 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.withings-action-button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #0f172a;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.42rem 0.72rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease;
+}
+
+.withings-action-button.ghost {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+}
+
+.withings-action-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.withings-action-button:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+}
+
+/* ダークモード */
+
+body[data-theme='dark'] .withings-card {
+  background: #111b2f;
+  border-color: #2b3953;
+  color: #dbe6f7;
+}
+
+body[data-theme='dark'] .withings-heading {
+  color: #f8fafc;
+}
+
+body[data-theme='dark'] .withings-description,
+body[data-theme='dark'] .withings-summary-label,
+body[data-theme='dark'] .withings-workout-label,
+body[data-theme='dark'] .withings-metrics-title,
+body[data-theme='dark'] .withings-status-label {
+  color: #9fb0c9;
+}
+
+body[data-theme='dark'] .withings-status-value {
+  border-color: #324663;
+  background: #16243f;
+  color: #dbe6f7;
+}
+
+body[data-theme='dark'] .withings-status-value.is-connected {
+  border-color: #16a34a;
+  background: rgba(34, 197, 94, 0.16);
+  color: #bbf7d0;
+}
+
+body[data-theme='dark'] .withings-metric {
+  border-color: #324663;
+  background: #16243f;
+}
+
+body[data-theme='dark'] .withings-metric.withings-workout-metric {
+  border: none;
+  background: transparent;
+}
+
+body[data-theme='dark'] .withings-skeleton-line {
+  background: linear-gradient(90deg, #25344d 20%, #314666 45%, #25344d 70%);
+  background-size: 220% 100%;
+}
+
+body[data-theme='dark'] .withings-trend {
+  --withings-tooltip-bg: #101b30;
+  --withings-tooltip-text: #dbe6f7;
+  --withings-tooltip-shadow: 0 14px 28px -16px rgba(2, 6, 23, 0.7);
+  --withings-weight-label-color: #7dd3fc;
+}
+
+body[data-theme='dark'] .withings-range-button {
+  color: #9fb0c9;
+}
+
+body[data-theme='dark'] .withings-range-button:hover {
+  opacity: 0.75;
+}
+
+body[data-theme='dark'] .withings-range-button.is-active {
+  color: #dbe6f7;
+}
+
+body[data-theme='dark'] .recharts-cartesian-axis-tick-value,
+body[data-theme='dark'] .recharts-default-legend .recharts-legend-item-text {
+  fill: #9fb0c9;
+}
+
+body[data-theme='dark'] .withings-metric-value {
+  color: #f1f5f9;
+}
+
+body[data-theme='dark'] .withings-trend-legend-text {
+  color: #9fb0c9;
+}
+
+body[data-theme='dark'] .withings-action-button {
+  border-color: #dbe6f7;
+  background: #dbe6f7;
+  color: #0f172a;
+}
+
+body[data-theme='dark'] .withings-action-button.ghost {
+  border-color: #324663;
+  background: #111b2f;
+  color: #dbe6f7;
+}
+
+/* レスポンシブ */
+
+@media (max-width: 860px) {
+  .withings-zone {
+    width: min(720px, calc(100% - 1.2rem));
+  }
+
+  .withings-summary,
+  .withings-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .withings-trend-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .withings-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .withings-action-button {
+    width: 100%;
+    justify-content: center;
+  }
+}

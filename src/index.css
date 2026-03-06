@@ -3,6 +3,7 @@
 
 @import './styles/base.css';
 @import './styles/hero.css';
+@import './styles/withings.css';
 @import './styles/gear.css';
 @import './styles/gear-cards.css';
 @import './styles/admin.css';

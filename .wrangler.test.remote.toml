@@ -3,10 +3,6 @@ main = "worker/index.ts"
 compatibility_date = "2026-03-03"
 workers_dev = true
 
-[[routes]]
-pattern = "ichi0g0y.io"
-custom_domain = true
-
 [assets]
 directory = "./dist"
 binding = "ASSETS"
@@ -36,7 +32,6 @@ binding = "IMAGE_BUCKET"
 bucket_name = "ichi0g0y-io"
 
 [env.remote]
-routes = []
 
 [[env.remote.d1_databases]]
 binding = "DB"
