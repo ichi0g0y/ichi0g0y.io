@@ -1,6 +1,6 @@
 import type { Env } from './types'
 import { errorResponse, jsonResponse, nowSeconds, parseCookies } from './utils'
-import { postLatestWithingsMeasurementTweet } from './twitter-auth'
+import { postLatestWithingsMeasurementTweet } from './twitter-post'
 import type { WithingsNotificationPayload } from './withings-types'
 import {
   WITHINGS_AUTHORIZE_URL,
@@ -448,11 +448,13 @@ export async function handleWithingsNotify(request: Request, env: Env, ctx?: Exe
     }
   }
 
-  if (env.WITHINGS_NOTIFY_SECRET?.trim()) {
-    const token = url.searchParams.get('token')?.trim()
-    if (!token || token !== env.WITHINGS_NOTIFY_SECRET.trim()) {
-      return errorResponse('notify token が不正です', 401)
-    }
+  const notifySecret = env.WITHINGS_NOTIFY_SECRET?.trim()
+  if (!notifySecret) {
+    return errorResponse('WITHINGS_NOTIFY_SECRET が未設定です', 401)
+  }
+  const token = url.searchParams.get('token')?.trim()
+  if (!token || token !== notifySecret) {
+    return errorResponse('notify token が不正です', 401)
   }
 
   const payload = await parseNotifyPayload(request)
