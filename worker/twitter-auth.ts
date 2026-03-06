@@ -20,6 +20,7 @@ import {
   redirectResponse,
 } from './twitter-oauth'
 import { createTwitterPost } from './twitter-post'
+import { getStoredConnection as getStoredWithingsConnection } from './withings-sync'
 export { postLatestWithingsMeasurementTweet } from './twitter-post'
 
 export async function handleTwitterOAuthStart(request: Request, env: Env) {
@@ -218,6 +219,53 @@ export async function handleTwitterTestPost(request: Request, env: Env) {
       return errorResponse('投稿文が長すぎます', 400, { reason: posted.reason })
     }
     return errorResponse('Xテスト投稿に失敗しました', 502, { reason: posted.reason })
+  }
+
+  return jsonResponse({ ok: true, tweetId: posted.tweetId, mode: posted.mode })
+}
+
+export async function handleTwitterLatestPost(request: Request, env: Env) {
+  const connection = await getStoredTwitterConnection(env)
+  if (!connection) {
+    return errorResponse('X連携が未設定です', 400)
+  }
+
+  const withingsConnection = await getStoredWithingsConnection(env)
+  if (!withingsConnection) {
+    return errorResponse('Withings連携が未設定です', 400)
+  }
+
+  const body = await readJsonBody<{ template?: string }>(request)
+  const settings = await ensureTwitterPostSettings(env)
+  const template = body?.template?.trim() || settings.template
+  if (!template) {
+    return errorResponse('投稿テンプレートを入力してください', 400)
+  }
+
+  const posted = await createTwitterPost(env, {
+    template,
+    withingsUserId: withingsConnection.userId,
+    ignoreAlreadyPosted: false,
+    updatePostedMarker: true,
+    requireImage: true,
+  })
+  if (!posted.ok) {
+    if (posted.reason === 'missing_tweet_write_scope') {
+      return errorResponse('X再認証を行って tweet.write 権限を付与してください', 400, { reason: posted.reason })
+    }
+    if (posted.reason === 'missing_media_write_scope') {
+      return errorResponse('X再認証を行って media.write 権限を付与してください', 400, { reason: posted.reason })
+    }
+    if (posted.reason === 'measurement_not_found') {
+      return errorResponse('投稿できるWithings計測データがありません', 400, { reason: posted.reason })
+    }
+    if (posted.reason === 'already_posted') {
+      return errorResponse('最新の体重計測は既に投稿済みです', 400, { reason: posted.reason })
+    }
+    if (posted.reason === 'tweet_too_long') {
+      return errorResponse('投稿文が長すぎます', 400, { reason: posted.reason })
+    }
+    return errorResponse('最新データのX投稿に失敗しました', 502, { reason: posted.reason })
   }
 
   return jsonResponse({ ok: true, tweetId: posted.tweetId, mode: posted.mode })

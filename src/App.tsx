@@ -81,6 +81,7 @@ function App() {
     isWithingsLoading,
     isWithingsConnecting,
     isWithingsSyncing,
+    isWithingsNotifyTesting,
     selectedWithingsView,
     setSelectedWithingsView,
     isWithingsSettingsDialogOpen,
@@ -98,6 +99,7 @@ function App() {
     formatWithingsMeasuredAt,
     handleWithingsConnect,
     handleWithingsSync,
+    handleWithingsNotifyTest,
     handleOpenWithingsSettingsDialog,
     handleCloseWithingsSettingsDialog,
   } = useWithings({
@@ -117,6 +119,7 @@ function App() {
     twitterAutoPostEnabledDraft,
     setTwitterAutoPostEnabledDraft,
     isTwitterTemplateSaving,
+    isTwitterLatestPosting,
     isTwitterTestPosting,
     twitterAccountLabel,
     twitterLastPostedLabel,
@@ -129,6 +132,7 @@ function App() {
     handleCloseTwitterTemplateDialog,
     handleInsertTwitterPlaceholder,
     handleSaveTwitterTemplate,
+    handleTwitterLatestPost,
     handleTestTwitterPost,
   } = useTwitter({
     accessToken,
@@ -895,10 +899,12 @@ function App() {
           isOpen={isWithingsSettingsDialogOpen}
           isConnecting={isWithingsConnecting}
           isSyncing={isWithingsSyncing}
+          isTestingNotify={isWithingsNotifyTesting}
           title={labels.withingsSettingsDialogTitle}
           description={labels.withingsConnectHint}
           connectLabel={labels.withingsConnectButton}
           syncLabel={labels.withingsSyncButton}
+          notifyTestLabel={isWithingsNotifyTesting ? labels.withingsNotifyTestingButton : labels.withingsNotifyTestButton}
           statusLabel={labels.withingsStatusLabel}
           statusValue={withingsStatusValue}
           userLabel={labels.withingsSettingsUserLabel}
@@ -912,6 +918,9 @@ function App() {
           onSync={() => {
             void handleWithingsSync()
           }}
+          onTestNotify={() => {
+            void handleWithingsNotifyTest()
+          }}
           canSync={Boolean(withingsStatus?.connected)}
         />
       ) : null}
@@ -921,6 +930,7 @@ function App() {
           isOpen={isTwitterTemplateDialogOpen}
           isSaving={isTwitterTemplateSaving}
           isConnecting={isTwitterAuthBusy}
+          isPublishing={isTwitterLatestPosting}
           isTesting={isTwitterTestPosting}
           title={labels.twitterTemplateDialogTitle}
           description={labels.twitterTemplateDescription}
@@ -940,6 +950,7 @@ function App() {
                 ? labels.twitterTemplateReauthorize
                 : labels.twitterTemplateReconnect
           }
+          publishLabel={isTwitterLatestPosting ? labels.twitterTemplatePostingLatest : labels.twitterTemplatePostLatest}
           testLabel={isTwitterTestPosting ? labels.twitterTemplateTesting : labels.twitterTemplateTest}
           accountLabel={labels.twitterTemplateAccountLabel}
           accountValue={twitterAccountLabel}
@@ -953,6 +964,9 @@ function App() {
           onSubmit={handleSaveTwitterTemplate}
           onConnect={() => {
             void handleTwitterConnect()
+          }}
+          onPublishLatest={() => {
+            void handleTwitterLatestPost()
           }}
           onTestPost={() => {
             void handleTestTwitterPost()

@@ -134,6 +134,7 @@ export function useWithings(deps: UseWithingsDeps) {
   const [isWithingsLoading, setIsWithingsLoading] = useState(true)
   const [isWithingsConnecting, setIsWithingsConnecting] = useState(false)
   const [isWithingsSyncing, setIsWithingsSyncing] = useState(false)
+  const [isWithingsNotifyTesting, setIsWithingsNotifyTesting] = useState(false)
   const [selectedWithingsView, setSelectedWithingsView] = useState<'weight' | 'workout'>('weight')
   const [isWithingsSettingsDialogOpen, setIsWithingsSettingsDialogOpen] = useState(false)
 
@@ -251,16 +252,47 @@ export function useWithings(deps: UseWithingsDeps) {
     }
   }, [activeLanguage, isWithingsSyncing, loadWithingsStatus, requestWithAuth, showToast])
 
+  const handleWithingsNotifyTest = useCallback(async () => {
+    if (isWithingsNotifyTesting) {
+      return
+    }
+    setIsWithingsNotifyTesting(true)
+    try {
+      const data = await requestWithAuth('/api/admin/withings/notify-test', {
+        method: 'POST',
+      })
+      await loadWithingsStatus()
+      const message =
+        typeof data.message === 'string' && data.message.trim()
+          ? data.message
+          : activeLanguage === 'ja'
+            ? '擬似Notifyを実行しました。'
+            : 'Simulated notify executed.'
+      const tone = data.latestNewWeightMeasurement ? 'success' : 'info'
+      showToast(message, tone)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : activeLanguage === 'ja'
+            ? '擬似Notifyの実行に失敗しました。'
+            : 'Failed to run simulated notify.'
+      showToast(message, 'error')
+    } finally {
+      setIsWithingsNotifyTesting(false)
+    }
+  }, [activeLanguage, isWithingsNotifyTesting, loadWithingsStatus, requestWithAuth, showToast])
+
   const handleOpenWithingsSettingsDialog = useCallback(() => {
     setIsWithingsSettingsDialogOpen(true)
   }, [])
 
   const handleCloseWithingsSettingsDialog = useCallback(() => {
-    if (isWithingsConnecting || isWithingsSyncing) {
+    if (isWithingsConnecting || isWithingsSyncing || isWithingsNotifyTesting) {
       return
     }
     setIsWithingsSettingsDialogOpen(false)
-  }, [isWithingsConnecting, isWithingsSyncing])
+  }, [isWithingsConnecting, isWithingsNotifyTesting, isWithingsSyncing])
 
   useEffect(() => {
     void loadWithingsStatus()
@@ -313,6 +345,7 @@ export function useWithings(deps: UseWithingsDeps) {
     isWithingsLoading,
     isWithingsConnecting,
     isWithingsSyncing,
+    isWithingsNotifyTesting,
     selectedWithingsView,
     setSelectedWithingsView,
     isWithingsSettingsDialogOpen,
@@ -331,6 +364,7 @@ export function useWithings(deps: UseWithingsDeps) {
     loadWithingsStatus,
     handleWithingsConnect,
     handleWithingsSync,
+    handleWithingsNotifyTest,
     handleOpenWithingsSettingsDialog,
     handleCloseWithingsSettingsDialog,
   }

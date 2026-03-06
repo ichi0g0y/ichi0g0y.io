@@ -12,6 +12,35 @@ import {
 import { getStoredTwitterConnection, ensureTwitterPostSettings, upsertTwitterConnection, markTwitterPostPublished } from './twitter-db'
 import { ensureTwitterConnectionReady, hasTwitterWriteScope, hasTwitterMediaWriteScope, refreshTwitterAuthorization } from './twitter-oauth'
 
+export type CreateTwitterPostResult =
+  | {
+      ok: true
+      tweetId: string | null
+      mode: 'with_image' | 'text_only'
+    }
+  | {
+      ok: false
+      reason:
+        | 'connection_not_found'
+        | 'missing_tweet_write_scope'
+        | 'measurement_not_found'
+        | 'outside_window'
+        | 'already_posted'
+        | 'empty_text'
+        | 'tweet_too_long'
+        | 'missing_media_write_scope'
+        | 'image_upload_failed'
+        | 'chart_generation_failed'
+        | 'post_failed'
+    }
+
+export type PostLatestWithingsMeasurementTweetResult =
+  | CreateTwitterPostResult
+  | {
+      ok: false
+      reason: 'auto_post_disabled'
+    }
+
 function encodeBase64(bytes: Uint8Array) {
   let binary = ''
   const chunkSize = 0x8000
@@ -325,7 +354,7 @@ async function getWithingsMeasurementForTweet(
     )
 }
 
-export async function createTwitterPost(env: Env, options: CreateTwitterPostOptions) {
+export async function createTwitterPost(env: Env, options: CreateTwitterPostOptions): Promise<CreateTwitterPostResult> {
   const connection = await getStoredTwitterConnection(env)
   if (!connection) {
     return { ok: false, reason: 'connection_not_found' as const }
@@ -406,16 +435,12 @@ export async function postLatestWithingsMeasurementTweet(
   targetGroupId?: number | null,
   minMeasuredAt?: number | null,
   maxMeasuredAt?: number | null,
-) {
+): Promise<PostLatestWithingsMeasurementTweetResult> {
   const settings = await ensureTwitterPostSettings(env)
   if (!settings.autoPostEnabled) {
-    return false
+    return { ok: false, reason: 'auto_post_disabled' }
   }
-  const connection = await getStoredTwitterConnection(env)
-  if (!connection) {
-    return false
-  }
-  const posted = await createTwitterPost(env, {
+  return createTwitterPost(env, {
     template: settings.template,
     withingsUserId,
     targetGroupId,
@@ -424,5 +449,4 @@ export async function postLatestWithingsMeasurementTweet(
     updatePostedMarker: true,
     requireImage: true,
   })
-  return posted.ok
 }

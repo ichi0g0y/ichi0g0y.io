@@ -1,6 +1,8 @@
 import type { Env } from './types'
 import { errorResponse, jsonResponse, nowSeconds, parseCookies } from './utils'
 import { postLatestWithingsMeasurementTweet } from './twitter-post'
+import type { PostLatestWithingsMeasurementTweetResult } from './twitter-post'
+import type { WithingsMeasurementForTweet } from './twitter-types'
 import type { WithingsNotificationPayload } from './withings-types'
 import {
   WITHINGS_AUTHORIZE_URL,
@@ -76,6 +78,266 @@ async function parseNotifyPayload(request: Request): Promise<WithingsNotificatio
     endDate: parseOptionalInteger(raw.get('enddate')),
     raw: rawObject,
   }
+}
+
+type WithingsNotifyAuthMode = 'token' | 'legacy_callback' | 'simulation'
+
+type NotifySubscriptionRepairResult = {
+  attempted: boolean
+  repaired: boolean
+  callbackUrl: string | null
+  usedFallback: boolean
+  error: string | null
+  failedApplis: number[]
+}
+
+type WithingsNotifyProcessResult = {
+  ok: boolean
+  authMode: WithingsNotifyAuthMode
+  payloadUserMatched: boolean
+  syncOk: boolean
+  latestNewWeightMeasurement: WithingsMeasurementForTweet | null
+  tweetAttempted: boolean
+  tweetPosted: boolean
+  tweetResult: PostLatestWithingsMeasurementTweetResult | null
+  skipReason:
+    | 'connection_not_found'
+    | 'payload_user_mismatch'
+    | 'sync_failed'
+    | 'non_measure_notify'
+    | 'no_new_weight_measurement'
+    | 'dry_run'
+    | null
+  subscriptionRepair: NotifySubscriptionRepairResult
+}
+
+function normalizeNotifyCallbackPath(rawUrl: string) {
+  const url = new URL(rawUrl)
+  const pathname = url.pathname.length > 1 && url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname
+  return `${url.origin}${pathname}`
+}
+
+function shouldAllowLegacyNotify(request: Request, connection: Awaited<ReturnType<typeof getStoredConnection>>, payload: WithingsNotificationPayload) {
+  if (!connection?.notifyCallbackUrl || !payload.userId || payload.userId !== connection.userId) {
+    return false
+  }
+
+  const subscribedUrl = new URL(connection.notifyCallbackUrl)
+  if (subscribedUrl.searchParams.get('token')?.trim()) {
+    return false
+  }
+
+  return normalizeNotifyCallbackPath(connection.notifyCallbackUrl) === normalizeNotifyCallbackPath(request.url)
+}
+
+async function repairNotifySubscriptionIfNeeded(
+  request: Request,
+  env: Env,
+  connection: NonNullable<Awaited<ReturnType<typeof ensureConnectionReady>>>,
+) {
+  const expectedCallbackUrl = getWithingsNotifyCallbackUrl(request, env)
+  const currentCallbackUrl = connection.notifyCallbackUrl?.trim() || null
+  if (currentCallbackUrl === expectedCallbackUrl) {
+    return {
+      attempted: false,
+      repaired: false,
+      callbackUrl: currentCallbackUrl,
+      usedFallback: false,
+      error: null,
+      failedApplis: [],
+    } satisfies NotifySubscriptionRepairResult
+  }
+
+  const notifyResult = await subscribeNotify(request, env, connection)
+  if (!notifyResult.ok) {
+    return {
+      attempted: true,
+      repaired: false,
+      callbackUrl: notifyResult.callbackUrl,
+      usedFallback: notifyResult.usedFallback,
+      error: notifyResult.error,
+      failedApplis: notifyResult.failedApplis,
+    } satisfies NotifySubscriptionRepairResult
+  }
+
+  await markNotifySubscription(env, connection, notifyResult.callbackUrl)
+  return {
+    attempted: true,
+    repaired: true,
+    callbackUrl: notifyResult.callbackUrl,
+    usedFallback: notifyResult.usedFallback,
+    error: null,
+    failedApplis: notifyResult.failedApplis,
+  } satisfies NotifySubscriptionRepairResult
+}
+
+async function processWithingsNotify(
+  request: Request,
+  env: Env,
+  payload: WithingsNotificationPayload,
+  options: {
+    authMode: WithingsNotifyAuthMode
+    dryRun?: boolean
+    repairSubscription?: boolean
+  },
+): Promise<WithingsNotifyProcessResult> {
+  const connection = await ensureConnectionReady(env)
+  if (!connection) {
+    return {
+      ok: false,
+      authMode: options.authMode,
+      payloadUserMatched: false,
+      syncOk: false,
+      latestNewWeightMeasurement: null,
+      tweetAttempted: false,
+      tweetPosted: false,
+      tweetResult: null,
+      skipReason: 'connection_not_found',
+      subscriptionRepair: {
+        attempted: false,
+        repaired: false,
+        callbackUrl: null,
+        usedFallback: false,
+        error: null,
+        failedApplis: [],
+      },
+    }
+  }
+
+  if (payload.userId && payload.userId !== connection.userId) {
+    return {
+      ok: false,
+      authMode: options.authMode,
+      payloadUserMatched: false,
+      syncOk: false,
+      latestNewWeightMeasurement: null,
+      tweetAttempted: false,
+      tweetPosted: false,
+      tweetResult: null,
+      skipReason: 'payload_user_mismatch',
+      subscriptionRepair: {
+        attempted: false,
+        repaired: false,
+        callbackUrl: connection.notifyCallbackUrl,
+        usedFallback: false,
+        error: null,
+        failedApplis: [],
+      },
+    }
+  }
+
+  const synced = await syncMeasurements(env, connection, payload.startDate, payload.endDate)
+  const repairConnection = options.repairSubscription ? await ensureConnectionReady(env) : connection
+  const subscriptionRepair = options.repairSubscription && repairConnection
+    ? await repairNotifySubscriptionIfNeeded(request, env, repairConnection)
+    : {
+        attempted: false,
+        repaired: false,
+        callbackUrl: connection.notifyCallbackUrl,
+        usedFallback: false,
+        error: null,
+        failedApplis: [],
+      }
+
+  if (!synced.ok) {
+    return {
+      ok: false,
+      authMode: options.authMode,
+      payloadUserMatched: true,
+      syncOk: false,
+      latestNewWeightMeasurement: synced.latestNewWeightMeasurement,
+      tweetAttempted: false,
+      tweetPosted: false,
+      tweetResult: null,
+      skipReason: 'sync_failed',
+      subscriptionRepair,
+    }
+  }
+
+  if (payload.appli !== WITHINGS_NOTIFY_APPLI_MEASURE) {
+    return {
+      ok: true,
+      authMode: options.authMode,
+      payloadUserMatched: true,
+      syncOk: true,
+      latestNewWeightMeasurement: synced.latestNewWeightMeasurement,
+      tweetAttempted: false,
+      tweetPosted: false,
+      tweetResult: null,
+      skipReason: 'non_measure_notify',
+      subscriptionRepair,
+    }
+  }
+
+  if (!synced.latestNewWeightMeasurement) {
+    return {
+      ok: true,
+      authMode: options.authMode,
+      payloadUserMatched: true,
+      syncOk: true,
+      latestNewWeightMeasurement: null,
+      tweetAttempted: false,
+      tweetPosted: false,
+      tweetResult: null,
+      skipReason: 'no_new_weight_measurement',
+      subscriptionRepair,
+    }
+  }
+
+  if (options.dryRun) {
+    return {
+      ok: true,
+      authMode: options.authMode,
+      payloadUserMatched: true,
+      syncOk: true,
+      latestNewWeightMeasurement: synced.latestNewWeightMeasurement,
+      tweetAttempted: false,
+      tweetPosted: false,
+      tweetResult: null,
+      skipReason: 'dry_run',
+      subscriptionRepair,
+    }
+  }
+
+  const tweetResult = await postLatestWithingsMeasurementTweet(
+    env,
+    connection.userId,
+    synced.latestNewWeightMeasurement.grpid,
+    synced.latestNewWeightMeasurement.measuredAt,
+    synced.latestNewWeightMeasurement.measuredAt,
+  )
+
+  return {
+    ok: tweetResult.ok,
+    authMode: options.authMode,
+    payloadUserMatched: true,
+    syncOk: true,
+    latestNewWeightMeasurement: synced.latestNewWeightMeasurement,
+    tweetAttempted: true,
+    tweetPosted: tweetResult.ok,
+    tweetResult,
+    skipReason: null,
+    subscriptionRepair,
+  }
+}
+
+function buildSimulatedNotifyMessage(result: WithingsNotifyProcessResult) {
+  if (result.skipReason === 'connection_not_found') {
+    return 'Withings連携が未設定です。'
+  }
+  if (result.skipReason === 'sync_failed') {
+    return '擬似Notifyの同期に失敗しました。'
+  }
+  if (result.skipReason === 'no_new_weight_measurement') {
+    return '擬似Notifyを実行しました。新しい体重計測は見つからず、X投稿は抑止しました。'
+  }
+  if (result.skipReason === 'dry_run' && result.latestNewWeightMeasurement) {
+    return '擬似Notifyを実行しました。新しい体重計測を検出しましたが、X投稿は dry-run で抑止しました。'
+  }
+  if (result.skipReason === 'non_measure_notify') {
+    return '擬似Notifyを実行しました。体重系通知ではないため、X投稿は対象外です。'
+  }
+  return '擬似Notifyを実行しました。X投稿は抑止しています。'
 }
 
 export async function handleWithingsStatus(env: Env) {
@@ -449,35 +711,54 @@ export async function handleWithingsNotify(request: Request, env: Env, ctx?: Exe
     }
   }
 
-  const notifySecret = env.WITHINGS_NOTIFY_SECRET?.trim()
-  if (!notifySecret) {
-    return errorResponse('WITHINGS_NOTIFY_SECRET が未設定です', 401)
-  }
-  const token = url.searchParams.get('token')?.trim()
-  if (!token || token !== notifySecret) {
+  const payload = await parseNotifyPayload(request)
+  const storedConnection = await getStoredConnection(env)
+  const notifySecret = env.WITHINGS_NOTIFY_SECRET?.trim() || null
+  const token = url.searchParams.get('token')?.trim() || null
+  const authMode: WithingsNotifyAuthMode | null =
+    notifySecret && token === notifySecret ? 'token' : shouldAllowLegacyNotify(request, storedConnection, payload) ? 'legacy_callback' : null
+  if (!authMode) {
+    if (!notifySecret) {
+      return errorResponse('WITHINGS_NOTIFY_SECRET が未設定です', 401)
+    }
     return errorResponse('notify token が不正です', 401)
   }
 
-  const payload = await parseNotifyPayload(request)
-
   const runSync = async () => {
     try {
-      const connection = await ensureConnectionReady(env)
-      if (!connection) {
-        return
-      }
-      if (payload.userId && payload.userId !== connection.userId) {
-        return
-      }
-      const synced = await syncMeasurements(env, connection, payload.startDate, payload.endDate)
-      if (synced.ok && payload.appli === WITHINGS_NOTIFY_APPLI_MEASURE && synced.latestNewWeightMeasurement) {
-        await postLatestWithingsMeasurementTweet(
-          env,
-          connection.userId,
-          synced.latestNewWeightMeasurement.grpid,
-          synced.latestNewWeightMeasurement.measuredAt,
-          synced.latestNewWeightMeasurement.measuredAt,
-        )
+      const result = await processWithingsNotify(request, env, payload, {
+        authMode,
+        dryRun: false,
+        repairSubscription: authMode === 'legacy_callback',
+      })
+      console.info('[withings] notify processed', {
+        authMode: result.authMode,
+        payloadUserMatched: result.payloadUserMatched,
+        syncOk: result.syncOk,
+        latestNewWeightMeasurement: result.latestNewWeightMeasurement
+          ? {
+              grpid: result.latestNewWeightMeasurement.grpid,
+              measuredAt: result.latestNewWeightMeasurement.measuredAt,
+            }
+          : null,
+        tweetPosted: result.tweetPosted,
+        tweetReason: result.tweetResult?.ok ? null : result.tweetResult?.reason ?? result.skipReason,
+        subscriptionRepair: {
+          attempted: result.subscriptionRepair.attempted,
+          repaired: result.subscriptionRepair.repaired,
+          callbackUrl: result.subscriptionRepair.callbackUrl,
+          usedFallback: result.subscriptionRepair.usedFallback,
+          error: result.subscriptionRepair.error,
+          failedApplis: result.subscriptionRepair.failedApplis,
+        },
+      })
+      if (result.subscriptionRepair.attempted && !result.subscriptionRepair.repaired) {
+        console.warn('[withings] notify subscription repair failed', {
+          callbackUrl: result.subscriptionRepair.callbackUrl,
+          error: result.subscriptionRepair.error,
+          failedApplis: result.subscriptionRepair.failedApplis,
+          usedFallback: result.subscriptionRepair.usedFallback,
+        })
       }
     } catch (error) {
       console.error(
@@ -520,5 +801,67 @@ export async function handleWithingsSync(env: Env, request?: Request) {
     return errorResponse('Withingsデータの同期に失敗しました', 502)
   }
 
-  return jsonResponse({ ok: true, startDate, endDate })
+  let notifySubscription = null
+  if (request) {
+    const refreshedConnection = await ensureConnectionReady(env)
+    if (refreshedConnection) {
+      notifySubscription = await repairNotifySubscriptionIfNeeded(request, env, refreshedConnection)
+      if (notifySubscription.attempted && !notifySubscription.repaired) {
+        console.warn('[withings] sync notify subscription repair failed', {
+          callbackUrl: notifySubscription.callbackUrl,
+          error: notifySubscription.error,
+          failedApplis: notifySubscription.failedApplis,
+          usedFallback: notifySubscription.usedFallback,
+        })
+      }
+    }
+  }
+
+  return jsonResponse({
+    ok: true,
+    startDate,
+    endDate,
+    notifySubscription,
+  })
+}
+
+export async function handleWithingsNotifySimulation(request: Request, env: Env) {
+  const connection = await getStoredConnection(env)
+  if (!connection) {
+    return errorResponse('Withings連携が未設定です', 400)
+  }
+
+  const payload = {
+    userId: connection.userId,
+    appli: WITHINGS_NOTIFY_APPLI_MEASURE,
+    startDate: null,
+    endDate: null,
+    raw: {
+      userid: connection.userId,
+      appli: String(WITHINGS_NOTIFY_APPLI_MEASURE),
+      simulated: '1',
+    },
+  } satisfies WithingsNotificationPayload
+
+  const result = await processWithingsNotify(request, env, payload, {
+    authMode: 'simulation',
+    dryRun: true,
+    repairSubscription: true,
+  })
+  if (!result.syncOk) {
+    return errorResponse(buildSimulatedNotifyMessage(result), 502, {
+      syncOk: result.syncOk,
+      skipReason: result.skipReason,
+      subscriptionRepair: result.subscriptionRepair,
+    })
+  }
+
+  return jsonResponse({
+    ok: true,
+    dryRun: true,
+    message: buildSimulatedNotifyMessage(result),
+    latestNewWeightMeasurement: result.latestNewWeightMeasurement,
+    skipReason: result.skipReason,
+    subscriptionRepair: result.subscriptionRepair,
+  })
 }

@@ -60,6 +60,7 @@ export function useTwitter(deps: UseTwitterDeps) {
   const [twitterTemplateDraft, setTwitterTemplateDraft] = useState(DEFAULT_TWITTER_TEMPLATE)
   const [twitterAutoPostEnabledDraft, setTwitterAutoPostEnabledDraft] = useState(true)
   const [isTwitterTemplateSaving, setIsTwitterTemplateSaving] = useState(false)
+  const [isTwitterLatestPosting, setIsTwitterLatestPosting] = useState(false)
   const [isTwitterTestPosting, setIsTwitterTestPosting] = useState(false)
   const [twitterChartPreviewVersion, setTwitterChartPreviewVersion] = useState(0)
 
@@ -201,13 +202,13 @@ export function useTwitter(deps: UseTwitterDeps) {
   }, [twitterStatus])
 
   const handleCloseTwitterTemplateDialog = useCallback(() => {
-    if (isTwitterTemplateSaving || isTwitterTestPosting) {
+    if (isTwitterTemplateSaving || isTwitterLatestPosting || isTwitterTestPosting) {
       return
     }
     setIsTwitterTemplateDialogOpen(false)
     setTwitterTemplateDraft(twitterStatus?.settings.template || DEFAULT_TWITTER_TEMPLATE)
     setTwitterAutoPostEnabledDraft(twitterStatus?.settings.autoPostEnabled ?? true)
-  }, [isTwitterTemplateSaving, isTwitterTestPosting, twitterStatus])
+  }, [isTwitterLatestPosting, isTwitterTemplateSaving, isTwitterTestPosting, twitterStatus])
 
   const handleInsertTwitterPlaceholder = useCallback((placeholder: string) => {
     setTwitterTemplateDraft((previous) => {
@@ -304,6 +305,44 @@ export function useTwitter(deps: UseTwitterDeps) {
     }
   }, [activeLanguage, requestWithAuth, showToast, twitterTemplateDraft])
 
+  const handleTwitterLatestPost = useCallback(async () => {
+    const template = twitterTemplateDraft.trim()
+    if (!template) {
+      showToast(activeLanguage === 'ja' ? '投稿テンプレートを入力してください。' : 'Please enter a post template.', 'error')
+      return
+    }
+
+    setIsTwitterLatestPosting(true)
+    try {
+      const data = (await requestWithAuth('/api/admin/twitter/post-latest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template }),
+      })) as { mode?: 'with_image' | 'text_only' }
+      await loadTwitterStatus()
+      showToast(
+        data.mode === 'text_only'
+          ? activeLanguage === 'ja'
+            ? '画像添付に失敗したため、テキストのみで最新データを投稿しました。'
+            : 'The latest data was posted as text only because the chart image upload failed.'
+          : activeLanguage === 'ja'
+            ? '最新のWithingsデータをXへ投稿しました。'
+            : 'Posted the latest Withings data to X.',
+        data.mode === 'text_only' ? 'info' : 'success',
+      )
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : activeLanguage === 'ja'
+            ? '最新データのX投稿に失敗しました。'
+            : 'Failed to post the latest data to X.'
+      showToast(message, 'error')
+    } finally {
+      setIsTwitterLatestPosting(false)
+    }
+  }, [activeLanguage, loadTwitterStatus, requestWithAuth, showToast, twitterTemplateDraft])
+
   useEffect(() => {
     const url = new URL(window.location.href)
     const twitterError = url.searchParams.get('twitter_error')
@@ -351,6 +390,7 @@ export function useTwitter(deps: UseTwitterDeps) {
     twitterAutoPostEnabledDraft,
     setTwitterAutoPostEnabledDraft,
     isTwitterTemplateSaving,
+    isTwitterLatestPosting,
     isTwitterTestPosting,
     twitterChartPreviewVersion,
     setTwitterChartPreviewVersion,
@@ -366,6 +406,7 @@ export function useTwitter(deps: UseTwitterDeps) {
     handleCloseTwitterTemplateDialog,
     handleInsertTwitterPlaceholder,
     handleSaveTwitterTemplate,
+    handleTwitterLatestPost,
     handleTestTwitterPost,
   }
 }
