@@ -11,7 +11,6 @@ import {
 } from './twitter-types'
 import { getStoredTwitterConnection, ensureTwitterPostSettings, upsertTwitterConnection, markTwitterPostPublished } from './twitter-db'
 import { ensureTwitterConnectionReady, hasTwitterWriteScope, hasTwitterMediaWriteScope, refreshTwitterAuthorization } from './twitter-oauth'
-import { nowSeconds } from './utils'
 
 function encodeBase64(bytes: Uint8Array) {
   let binary = ''
@@ -257,26 +256,54 @@ function renderTwitterTemplate(template: string, measurement: WithingsMeasuremen
     .trim()
 }
 
-async function getLatestWithingsMeasurement(env: Env, userId?: string | null) {
-  const sql = userId
-    ? `
-      SELECT grpid, measured_at, weight_kg, fat_ratio, bmi
-      FROM withings_measurements
-      WHERE userid = ?1
-        AND weight_kg IS NOT NULL
-      ORDER BY measured_at DESC, grpid DESC
-      LIMIT 1
-    `
-    : `
-      SELECT grpid, measured_at, weight_kg, fat_ratio, bmi
-      FROM withings_measurements
-      WHERE weight_kg IS NOT NULL
-      ORDER BY measured_at DESC, grpid DESC
-      LIMIT 1
-    `
+async function getWithingsMeasurementForTweet(
+  env: Env,
+  userId?: string | null,
+  targetGroupId?: number | null,
+) {
+  const hasTargetGroupId = typeof targetGroupId === 'number' && Number.isFinite(targetGroupId)
+  const sql = hasTargetGroupId
+    ? userId
+      ? `
+        SELECT grpid, measured_at, weight_kg, fat_ratio, bmi
+        FROM withings_measurements
+        WHERE userid = ?1
+          AND grpid = ?2
+          AND weight_kg IS NOT NULL
+        LIMIT 1
+      `
+      : `
+        SELECT grpid, measured_at, weight_kg, fat_ratio, bmi
+        FROM withings_measurements
+        WHERE grpid = ?1
+          AND weight_kg IS NOT NULL
+        LIMIT 1
+      `
+    : userId
+      ? `
+        SELECT grpid, measured_at, weight_kg, fat_ratio, bmi
+        FROM withings_measurements
+        WHERE userid = ?1
+          AND weight_kg IS NOT NULL
+        ORDER BY measured_at DESC, grpid DESC
+        LIMIT 1
+      `
+      : `
+        SELECT grpid, measured_at, weight_kg, fat_ratio, bmi
+        FROM withings_measurements
+        WHERE weight_kg IS NOT NULL
+        ORDER BY measured_at DESC, grpid DESC
+        LIMIT 1
+      `
 
   const statement = env.DB.prepare(sql)
-  const query = userId ? statement.bind(userId) : statement
+  const query = hasTargetGroupId
+    ? userId
+      ? statement.bind(userId, targetGroupId)
+      : statement.bind(targetGroupId)
+    : userId
+      ? statement.bind(userId)
+      : statement
   return query
     .first<{
       grpid: number
@@ -307,7 +334,11 @@ export async function createTwitterPost(env: Env, options: CreateTwitterPostOpti
     return { ok: false, reason: 'missing_tweet_write_scope' as const }
   }
 
-  const measurement = await getLatestWithingsMeasurement(env, options.withingsUserId ?? null)
+  const measurement = await getWithingsMeasurementForTweet(
+    env,
+    options.withingsUserId ?? null,
+    options.targetGroupId ?? null,
+  )
   if (!measurement || measurement.weightKg === null) {
     return { ok: false, reason: 'measurement_not_found' as const }
   }
@@ -372,6 +403,7 @@ export async function createTwitterPost(env: Env, options: CreateTwitterPostOpti
 export async function postLatestWithingsMeasurementTweet(
   env: Env,
   withingsUserId: string,
+  targetGroupId?: number | null,
   minMeasuredAt?: number | null,
   maxMeasuredAt?: number | null,
 ) {
@@ -386,6 +418,7 @@ export async function postLatestWithingsMeasurementTweet(
   const posted = await createTwitterPost(env, {
     template: settings.template,
     withingsUserId,
+    targetGroupId,
     minMeasuredAt,
     maxMeasuredAt,
     updatePostedMarker: true,

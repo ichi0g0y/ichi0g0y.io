@@ -4,6 +4,7 @@ import { postLatestWithingsMeasurementTweet } from './twitter-post'
 import type { WithingsNotificationPayload } from './withings-types'
 import {
   WITHINGS_AUTHORIZE_URL,
+  WITHINGS_NOTIFY_APPLI_MEASURE,
   WITHINGS_OAUTH_STATE_TTL_SEC,
   WITHINGS_RECENT_WORKOUT_LIMIT,
 } from './withings-types'
@@ -400,14 +401,14 @@ export async function handleWithingsAuthCallback(request: Request, env: Env, ctx
           '[withings] initial sync threw exception',
           error instanceof Error ? error.stack ?? error.message : String(error),
         )
-        return false
+        return { ok: false, latestNewWeightMeasurement: null }
       }
     }
     if (ctx) {
       ctx.waitUntil(syncInBackground())
     } else {
       const synced = await syncInBackground()
-      if (!synced) {
+      if (!synced.ok) {
         return redirectToApp(request, env, 'connected', 'withings_sync_failed', [clearWithingsStateCookie(request)])
       }
     }
@@ -469,8 +470,14 @@ export async function handleWithingsNotify(request: Request, env: Env, ctx?: Exe
         return
       }
       const synced = await syncMeasurements(env, connection, payload.startDate, payload.endDate)
-      if (synced) {
-        await postLatestWithingsMeasurementTweet(env, connection.userId, payload.startDate, payload.endDate)
+      if (synced.ok && payload.appli === WITHINGS_NOTIFY_APPLI_MEASURE && synced.latestNewWeightMeasurement) {
+        await postLatestWithingsMeasurementTweet(
+          env,
+          connection.userId,
+          synced.latestNewWeightMeasurement.grpid,
+          synced.latestNewWeightMeasurement.measuredAt,
+          synced.latestNewWeightMeasurement.measuredAt,
+        )
       }
     } catch (error) {
       console.error(
@@ -509,7 +516,7 @@ export async function handleWithingsSync(env: Env, request?: Request) {
   }
 
   const synced = await syncMeasurements(env, connection, startDate, endDate)
-  if (!synced) {
+  if (!synced.ok) {
     return errorResponse('Withingsデータの同期に失敗しました', 502)
   }
 

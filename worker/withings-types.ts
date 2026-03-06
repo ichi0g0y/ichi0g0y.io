@@ -9,6 +9,7 @@ export const WITHINGS_SLEEP_V2_URL = 'https://wbsapi.withings.net/v2/sleep'
 export const WITHINGS_HEART_V2_URL = 'https://wbsapi.withings.net/v2/heart'
 export const WITHINGS_ANSWERS_V2_URL = 'https://wbsapi.withings.net/v2/answers'
 export const DEFAULT_WITHINGS_OAUTH_SCOPE = 'user.metrics,user.activity,user.sleepevents'
+export const WITHINGS_NOTIFY_APPLI_MEASURE = 1
 export const WITHINGS_NOTIFY_APPLIS = [1, 2, 4, 16, 44, 46, 50, 51, 52, 54, 55, 58, 60, 61, 62]
 export const WITHINGS_MEASURE_BASE_CATEGORIES = [1]
 export const WITHINGS_RETENTION_DAYS = 90
