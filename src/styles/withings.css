@@ -430,7 +430,11 @@ body[data-theme='dark'] .withings-action-button.ghost {
     width: min(720px, calc(100% - 1.2rem));
   }
 
-  .withings-summary,
+  .withings-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem 0.7rem;
+  }
+
   .withings-metrics {
     grid-template-columns: 1fr;
   }
