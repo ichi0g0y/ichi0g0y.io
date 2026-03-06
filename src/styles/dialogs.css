@@ -37,6 +37,10 @@
   width: min(420px, 100%);
 }
 
+.twitter-template-dialog {
+  width: min(560px, 100%);
+}
+
 .auth-dialog-header {
   display: flex;
   align-items: center;
@@ -88,6 +92,161 @@
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
+}
+
+.twitter-template-note {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.twitter-template-actions {
+  justify-content: flex-start;
+}
+
+.twitter-template-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.twitter-template-meta-item {
+  margin: 0;
+  border: 1px solid #d5dbe4;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 0.55rem 0.65rem;
+  display: grid;
+  gap: 0.22rem;
+}
+
+.twitter-template-meta-item span {
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.twitter-template-meta-item strong {
+  font-size: 0.84rem;
+  color: #111827;
+}
+
+.twitter-template-textarea {
+  min-height: 112px;
+}
+
+.twitter-template-placeholder-block,
+.twitter-template-preview-block {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.twitter-template-section-title {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+.twitter-template-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.twitter-template-preview-refresh {
+  border: 1px solid #d5dbe4;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #334155;
+  padding: 0.28rem 0.62rem;
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.twitter-template-preview-refresh:hover:not(:disabled) {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.twitter-template-preview-refresh:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.twitter-template-placeholder-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.twitter-template-placeholder-button {
+  border: 1px solid #d5dbe4;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #334155;
+  padding: 0.34rem 0.58rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.74rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.twitter-template-placeholder-button code {
+  font-size: 0.7rem;
+  color: #0f172a;
+}
+
+.twitter-template-placeholder-button:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.twitter-template-preview {
+  margin: 0;
+  border: 1px solid #d5dbe4;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 0.75rem;
+  min-height: 100px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.82rem;
+  font-family: inherit;
+  line-height: 1.55;
+  color: #111827;
+}
+
+.twitter-template-chart-preview {
+  border: 1px solid #d5dbe4;
+  border-radius: 10px;
+  background: #f8fafc;
+  overflow: hidden;
+  min-height: 180px;
+}
+
+.twitter-template-chart-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.twitter-template-chart-preview-empty {
+  margin: 0;
+  min-height: 180px;
+  padding: 1rem;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #64748b;
 }
 
 .confirm-dialog-message {
