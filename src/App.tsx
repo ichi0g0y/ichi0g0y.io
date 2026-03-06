@@ -1835,7 +1835,6 @@ function App() {
                   src={twitchEmbedSrc}
                   className="twitch-embed"
                   allow="autoplay; fullscreen; picture-in-picture"
-                  allowFullScreen
                 />
               </div>
             ) : (
