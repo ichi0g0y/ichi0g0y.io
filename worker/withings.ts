@@ -1,5 +1,6 @@
 import type { Env } from './types'
 import { errorResponse, jsonResponse, nowSeconds, parseCookies } from './utils'
+import { postLatestWithingsMeasurementTweet } from './twitter-auth'
 import type { WithingsNotificationPayload } from './withings-types'
 import {
   WITHINGS_AUTHORIZE_URL,
@@ -465,7 +466,10 @@ export async function handleWithingsNotify(request: Request, env: Env, ctx?: Exe
       if (payload.userId && payload.userId !== connection.userId) {
         return
       }
-      await syncMeasurements(env, connection, payload.startDate, payload.endDate)
+      const synced = await syncMeasurements(env, connection, payload.startDate, payload.endDate)
+      if (synced) {
+        await postLatestWithingsMeasurementTweet(env, connection.userId, payload.startDate, payload.endDate)
+      }
     } catch (error) {
       console.error(
         '[withings] notify sync threw exception',

@@ -16,6 +16,8 @@ import { AuthDialog } from './components/AuthDialog'
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog'
 import { EditGearDialog } from './components/EditGearDialog'
 import { RenameCategoryDialog } from './components/RenameCategoryDialog'
+import { TwitterTemplateDialog } from './components/TwitterTemplateDialog'
+import { WithingsSettingsDialog } from './components/WithingsSettingsDialog'
 import { WithingsTrendChart } from './components/WithingsTrendChart'
 import {
   APP_LOCALE_STORAGE_KEY,
@@ -31,7 +33,16 @@ import {
 } from './constants'
 import { useToast } from './hooks/useToast'
 import { useTypewriter } from './hooks/useTypewriter'
-import type { AddDialogStep, AppLocale, GearItem, ImageSize, LinkPreviewData, WithingsStatus, WithingsWorkoutDetailPoint } from './types'
+import type {
+  AddDialogStep,
+  AppLocale,
+  GearItem,
+  ImageSize,
+  LinkPreviewData,
+  TwitterStatus,
+  WithingsStatus,
+  WithingsWorkoutDetailPoint,
+} from './types'
 import {
   createIntroMessage,
   getAuthErrorMessage,
@@ -45,50 +56,24 @@ type AppLocalePreference = AppLocale | 'system'
 type AppTheme = 'light' | 'dark'
 type AppThemePreference = AppTheme | 'system'
 const GEAR_PAGE_SIZE = 12
-const TWITTER_AUTH_STATUS_STORAGE_KEY = 'twitter-auth-status-v1'
 const WITHINGS_STATUS_CACHE_KEY = 'withings-status-cache-v1'
 const EMPTY_WITHINGS_WORKOUTS: NonNullable<WithingsStatus['recentWorkouts']> = []
 const EMPTY_WITHINGS_WEIGHTS: NonNullable<WithingsStatus['recentWeights']> = []
+const DEFAULT_TWITTER_TEMPLATE = '体重 {{weight}}kg / 体脂肪率 {{fat_ratio}}% / BMI {{bmi}}\n{{measured_at}}'
+const TWITTER_TEMPLATE_KEYS = ['weight', 'fat_ratio', 'bmi', 'measured_at', 'measured_date', 'measured_time', 'timestamp'] as const
 
-type TwitterAuthStatus = {
-  username: string | null
-  obtainedAt: string
+function trimTemplateNumber(value: number | null | undefined, fractionDigits = 1) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return ''
+  }
+  return value.toFixed(fractionDigits).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
 }
 
-function loadTwitterAuthStatus(): TwitterAuthStatus | null {
-  if (typeof window === 'undefined') {
-    return null
-  }
-
-  try {
-    const raw = window.sessionStorage.getItem(TWITTER_AUTH_STATUS_STORAGE_KEY)
-    if (!raw) {
-      return null
-    }
-    const parsed = JSON.parse(raw) as TwitterAuthStatus
-    if (!parsed || typeof parsed !== 'object') {
-      return null
-    }
-    return {
-      username: parsed.username ?? null,
-      obtainedAt: typeof parsed.obtainedAt === 'string' && parsed.obtainedAt ? parsed.obtainedAt : new Date().toISOString(),
-    }
-  } catch {
-    return null
-  }
-}
-
-function persistTwitterAuthStatus(value: TwitterAuthStatus | null) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  if (!value) {
-    window.sessionStorage.removeItem(TWITTER_AUTH_STATUS_STORAGE_KEY)
-    return
-  }
-
-  window.sessionStorage.setItem(TWITTER_AUTH_STATUS_STORAGE_KEY, JSON.stringify(value))
+function renderTwitterTemplate(template: string, values: Map<string, string>) {
+  return template
+    .replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (matched, key: string) => values.get(key.toLowerCase()) ?? matched)
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 function detectSystemLocale(): AppLocale {
@@ -184,14 +169,22 @@ function App() {
   const [isWithingsConnecting, setIsWithingsConnecting] = useState(false)
   const [isWithingsSyncing, setIsWithingsSyncing] = useState(false)
   const [selectedWithingsView, setSelectedWithingsView] = useState<'weight' | 'workout'>('weight')
+  const [isWithingsSettingsDialogOpen, setIsWithingsSettingsDialogOpen] = useState(false)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [adminEmail, setAdminEmail] = useState<string | null>(null)
   const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false)
   const [authMessage, setAuthMessage] = useState('')
   const [isAuthBusy, setIsAuthBusy] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
-  const [twitterAuthStatus, setTwitterAuthStatus] = useState<TwitterAuthStatus | null>(loadTwitterAuthStatus)
+  const [twitterStatus, setTwitterStatus] = useState<TwitterStatus | null>(null)
   const [isTwitterAuthBusy, setIsTwitterAuthBusy] = useState(false)
+  const [isTwitterStatusLoading, setIsTwitterStatusLoading] = useState(false)
+  const [isTwitterTemplateDialogOpen, setIsTwitterTemplateDialogOpen] = useState(false)
+  const [twitterTemplateDraft, setTwitterTemplateDraft] = useState(DEFAULT_TWITTER_TEMPLATE)
+  const [twitterAutoPostEnabledDraft, setTwitterAutoPostEnabledDraft] = useState(true)
+  const [isTwitterTemplateSaving, setIsTwitterTemplateSaving] = useState(false)
+  const [isTwitterTestPosting, setIsTwitterTestPosting] = useState(false)
+  const [twitterChartPreviewVersion, setTwitterChartPreviewVersion] = useState(0)
   const [isAddFormOpen, setIsAddFormOpen] = useState(false)
   const [newGearUrl, setNewGearUrl] = useState('')
   const [newGearTitle, setNewGearTitle] = useState('')
@@ -610,50 +603,6 @@ function App() {
 
   useEffect(() => {
     const url = new URL(window.location.href)
-    const hashParams = new URLSearchParams(window.location.hash.startsWith('#') ? window.location.hash.slice(1) : '')
-    const twitterError = url.searchParams.get('twitter_error')
-    const twitterStatusQuery = url.searchParams.get('twitter')
-    const twitterAccessToken = hashParams.get('twitter_access_token')?.trim() ?? ''
-    const hasTwitterPayload = Boolean(twitterError || twitterStatusQuery || twitterAccessToken)
-
-    if (!hasTwitterPayload) {
-      return
-    }
-
-    if (twitterError) {
-      showToast(getTwitterAuthErrorMessage(twitterError), 'error')
-    } else if (twitterAccessToken) {
-      const nextTwitterAuthStatus: TwitterAuthStatus = {
-        username: hashParams.get('twitter_username')?.trim() || null,
-        obtainedAt: new Date().toISOString(),
-      }
-      setTwitterAuthStatus(nextTwitterAuthStatus)
-      persistTwitterAuthStatus(nextTwitterAuthStatus)
-      setIsEditMode(true)
-      showToast(activeLanguage === 'ja' ? 'Xログインが完了しました。' : 'X login completed.', 'success')
-    }
-
-    setIsTwitterAuthBusy(false)
-
-    url.searchParams.delete('twitter')
-    url.searchParams.delete('twitter_error')
-    for (const key of [
-      'twitter_access_token',
-      'twitter_refresh_token',
-      'twitter_token_type',
-      'twitter_scope',
-      'twitter_expires_in',
-      'twitter_user_id',
-      'twitter_username',
-    ]) {
-      hashParams.delete(key)
-    }
-    const nextHash = hashParams.toString()
-    window.history.replaceState(null, '', `${url.pathname}${url.search}${nextHash ? `#${nextHash}` : ''}`)
-  }, [activeLanguage, showToast])
-
-  useEffect(() => {
-    const url = new URL(window.location.href)
     const withingsError = url.searchParams.get('withings_error')
     const withingsStatusQuery = url.searchParams.get('withings')
     if (!withingsError && !withingsStatusQuery) {
@@ -681,6 +630,27 @@ function App() {
       setSelectedCategory('all')
     }
   }, [categoryOptions, selectedCategory])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const syncWithingsViewWithHash = () => {
+      if (window.location.hash === '#weight-graph') {
+        setSelectedWithingsView('weight')
+        window.requestAnimationFrame(() => {
+          document.getElementById('weight-graph')?.scrollIntoView({ block: 'start' })
+        })
+      }
+    }
+
+    syncWithingsViewWithHash()
+    window.addEventListener('hashchange', syncWithingsViewWithHash)
+    return () => {
+      window.removeEventListener('hashchange', syncWithingsViewWithHash)
+    }
+  }, [])
 
   useEffect(() => {
     setVisibleGearCount(GEAR_PAGE_SIZE)
@@ -777,6 +747,73 @@ function App() {
     [accessToken, parseApiResponse, refreshAccessToken],
   )
 
+  const loadTwitterStatus = useCallback(async () => {
+    if (!accessToken) {
+      setTwitterStatus(null)
+      setTwitterTemplateDraft(DEFAULT_TWITTER_TEMPLATE)
+      setTwitterAutoPostEnabledDraft(true)
+      return
+    }
+
+    setIsTwitterStatusLoading(true)
+    try {
+      const data = await requestWithAuth('/api/admin/twitter/status', {
+        method: 'GET',
+      })
+      const nextStatus = data as TwitterStatus
+      setTwitterStatus(nextStatus)
+      setTwitterTemplateDraft(nextStatus.settings.template || DEFAULT_TWITTER_TEMPLATE)
+      setTwitterAutoPostEnabledDraft(nextStatus.settings.autoPostEnabled)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : activeLanguage === 'ja'
+            ? 'X設定の読み込みに失敗しました。'
+            : 'Failed to load X settings.'
+      showToast(message, 'error')
+    } finally {
+      setIsTwitterStatusLoading(false)
+    }
+  }, [accessToken, activeLanguage, requestWithAuth, showToast])
+
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const twitterError = url.searchParams.get('twitter_error')
+    const twitterStatusQuery = url.searchParams.get('twitter')
+    const hasTwitterPayload = Boolean(twitterError || twitterStatusQuery)
+
+    if (!hasTwitterPayload) {
+      return
+    }
+
+    if (twitterError) {
+      showToast(getTwitterAuthErrorMessage(twitterError), 'error')
+    } else if (twitterStatusQuery === 'connected') {
+      setIsEditMode(true)
+      showToast(activeLanguage === 'ja' ? 'Xログインが完了しました。' : 'X login completed.', 'success')
+      void loadTwitterStatus()
+    }
+
+    setIsTwitterAuthBusy(false)
+
+    url.searchParams.delete('twitter')
+    url.searchParams.delete('twitter_error')
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
+  }, [activeLanguage, loadTwitterStatus, showToast])
+
+  useEffect(() => {
+    if (!accessToken) {
+      setTwitterStatus(null)
+      setTwitterTemplateDraft(DEFAULT_TWITTER_TEMPLATE)
+      setTwitterAutoPostEnabledDraft(true)
+      setIsTwitterTemplateDialogOpen(false)
+      return
+    }
+
+    void loadTwitterStatus()
+  }, [accessToken, loadTwitterStatus])
+
   const handleWithingsConnect = useCallback(async () => {
     if (isWithingsConnecting) {
       return
@@ -829,6 +866,128 @@ function App() {
     }
   }, [activeLanguage, isTwitterAuthBusy, requestWithAuth, showToast])
 
+  const handleOpenTwitterTemplateDialog = useCallback(() => {
+    setTwitterTemplateDraft(twitterStatus?.settings.template || DEFAULT_TWITTER_TEMPLATE)
+    setTwitterAutoPostEnabledDraft(twitterStatus?.settings.autoPostEnabled ?? true)
+    setTwitterChartPreviewVersion(Date.now())
+    setIsTwitterTemplateDialogOpen(true)
+  }, [twitterStatus])
+
+  const handleCloseTwitterTemplateDialog = useCallback(() => {
+    if (isTwitterTemplateSaving || isTwitterTestPosting) {
+      return
+    }
+    setIsTwitterTemplateDialogOpen(false)
+    setTwitterTemplateDraft(twitterStatus?.settings.template || DEFAULT_TWITTER_TEMPLATE)
+    setTwitterAutoPostEnabledDraft(twitterStatus?.settings.autoPostEnabled ?? true)
+  }, [isTwitterTemplateSaving, isTwitterTestPosting, twitterStatus])
+
+  const handleOpenWithingsSettingsDialog = useCallback(() => {
+    setIsWithingsSettingsDialogOpen(true)
+  }, [])
+
+  const handleCloseWithingsSettingsDialog = useCallback(() => {
+    if (isWithingsConnecting || isWithingsSyncing) {
+      return
+    }
+    setIsWithingsSettingsDialogOpen(false)
+  }, [isWithingsConnecting, isWithingsSyncing])
+
+  const handleInsertTwitterPlaceholder = useCallback((placeholder: string) => {
+    setTwitterTemplateDraft((previous) => {
+      if (!previous.trim()) {
+        return placeholder
+      }
+      const separator = previous.endsWith(' ') || previous.endsWith('\n') ? '' : ' '
+      return `${previous}${separator}${placeholder}`
+    })
+  }, [])
+
+  const handleSaveTwitterTemplate = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      const template = twitterTemplateDraft.trim()
+      if (!template) {
+        showToast(activeLanguage === 'ja' ? '投稿テンプレートを入力してください。' : 'Please enter a post template.', 'error')
+        return
+      }
+
+      setIsTwitterTemplateSaving(true)
+      try {
+        const data = (await requestWithAuth('/api/admin/twitter/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ template, autoPostEnabled: twitterAutoPostEnabledDraft }),
+        })) as { settings?: TwitterStatus['settings'] }
+
+        setTwitterStatus((previous) => ({
+          ok: true,
+          connected: previous?.connected ?? false,
+          connection: previous?.connection ?? null,
+          settings: {
+            autoPostEnabled: data.settings?.autoPostEnabled ?? twitterAutoPostEnabledDraft,
+            template,
+            lastPostedGroupId: data.settings?.lastPostedGroupId ?? previous?.settings.lastPostedGroupId ?? null,
+            lastPostedMeasuredAt: data.settings?.lastPostedMeasuredAt ?? previous?.settings.lastPostedMeasuredAt ?? null,
+            lastPostedTweetId: data.settings?.lastPostedTweetId ?? previous?.settings.lastPostedTweetId ?? null,
+            lastPostedTweetAt: data.settings?.lastPostedTweetAt ?? previous?.settings.lastPostedTweetAt ?? null,
+          },
+        }))
+        setTwitterTemplateDraft(template)
+        setIsTwitterTemplateDialogOpen(false)
+        showToast(activeLanguage === 'ja' ? 'X投稿テンプレートを保存しました。' : 'Saved the X post template.', 'success')
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : activeLanguage === 'ja'
+              ? 'X投稿テンプレートの保存に失敗しました。'
+              : 'Failed to save the X post template.'
+        showToast(message, 'error')
+      } finally {
+        setIsTwitterTemplateSaving(false)
+      }
+    },
+    [activeLanguage, requestWithAuth, showToast, twitterAutoPostEnabledDraft, twitterTemplateDraft],
+  )
+
+  const handleTestTwitterPost = useCallback(async () => {
+    const template = twitterTemplateDraft.trim()
+    if (!template) {
+      showToast(activeLanguage === 'ja' ? '投稿テンプレートを入力してください。' : 'Please enter a post template.', 'error')
+      return
+    }
+
+    setIsTwitterTestPosting(true)
+    try {
+      const data = (await requestWithAuth('/api/admin/twitter/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template }),
+      })) as { mode?: 'with_image' | 'text_only' }
+      showToast(
+        data.mode === 'text_only'
+          ? activeLanguage === 'ja'
+            ? '画像添付に失敗したため、テキストのみでテスト投稿しました。'
+            : 'The test post was sent as text only because the chart image upload failed.'
+          : activeLanguage === 'ja'
+            ? '画像付きでXへテスト投稿しました。'
+            : 'Sent a test post with the chart image to X.',
+        data.mode === 'text_only' ? 'info' : 'success',
+      )
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : activeLanguage === 'ja'
+            ? 'Xテスト投稿に失敗しました。'
+            : 'Failed to send a test post to X.'
+      showToast(message, 'error')
+    } finally {
+      setIsTwitterTestPosting(false)
+    }
+  }, [activeLanguage, requestWithAuth, showToast, twitterTemplateDraft])
+
   const handleWithingsSync = useCallback(async () => {
     if (isWithingsSyncing) {
       return
@@ -878,6 +1037,78 @@ function App() {
   const latestFatRatioLabel = formatFatRatio(latestMeasurement?.fatRatio)
   const latestBmiLabel = formatBmi(latestMeasurement?.bmi)
   const latestMeasuredAtLabel = formatWithingsMeasuredAt(latestMeasurement?.measuredAt)
+  const withingsConnectedUserLabel = withingsStatus?.connection?.userId?.trim() || labels.withingsStatusPending
+  const withingsLastSyncedLabel = withingsStatus?.connection?.lastSyncedAt
+    ? formatWithingsMeasuredAt(withingsStatus.connection.lastSyncedAt)
+    : labels.withingsSettingsLastSyncedEmpty
+  const twitterAccountLabel = twitterStatus?.connection?.username
+    ? `@${twitterStatus.connection.username}`
+    : labels.twitterTemplateAccountEmpty
+  const twitterLastPostedLabel = twitterStatus?.settings.lastPostedTweetAt
+    ? formatWithingsMeasuredAt(twitterStatus.settings.lastPostedTweetAt)
+    : labels.twitterTemplateLastPostedEmpty
+  const twitterTemplatePlaceholders = useMemo(
+    () =>
+      TWITTER_TEMPLATE_KEYS.map((key) => ({
+        key,
+        token: `{{${key}}}`,
+        label:
+          key === 'weight'
+            ? activeLanguage === 'ja'
+              ? '体重'
+              : 'Weight'
+            : key === 'fat_ratio'
+              ? activeLanguage === 'ja'
+                ? '体脂肪率'
+                : 'Body Fat'
+              : key === 'bmi'
+                ? 'BMI'
+                : key === 'measured_at'
+                  ? activeLanguage === 'ja'
+                    ? '計測日時'
+                    : 'Measured At'
+                  : key === 'measured_date'
+                    ? activeLanguage === 'ja'
+                      ? '計測日'
+                      : 'Measured Date'
+                    : key === 'measured_time'
+                      ? activeLanguage === 'ja'
+                        ? '計測時刻'
+                        : 'Measured Time'
+                      : activeLanguage === 'ja'
+                        ? 'UNIX時刻'
+                        : 'Timestamp',
+      })),
+    [activeLanguage],
+  )
+  const twitterTemplateValues = useMemo(() => {
+    const measuredAt = latestMeasurement?.measuredAt ?? Math.floor(Date.now() / 1000)
+    return new Map<string, string>([
+      ['weight', trimTemplateNumber(latestMeasurement?.weightKg ?? 70.2)],
+      ['fat_ratio', trimTemplateNumber(latestMeasurement?.fatRatio ?? 18.4)],
+      ['bmi', trimTemplateNumber(latestMeasurement?.bmi ?? 22.1)],
+      ['measured_at', formatWithingsMeasuredAt(measuredAt)],
+      ['measured_date', new Date(measuredAt * 1000).toLocaleDateString(activeLanguage === 'ja' ? 'ja-JP' : 'en-US')],
+      [
+        'measured_time',
+        new Date(measuredAt * 1000).toLocaleTimeString(activeLanguage === 'ja' ? 'ja-JP' : 'en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+      ],
+      ['timestamp', String(measuredAt)],
+    ])
+  }, [activeLanguage, formatWithingsMeasuredAt, latestMeasurement])
+  const twitterTemplatePreview = useMemo(
+    () => renderTwitterTemplate(twitterTemplateDraft, twitterTemplateValues),
+    [twitterTemplateDraft, twitterTemplateValues],
+  )
+  const twitterChartPreviewUrl = useMemo(() => {
+    if (!latestMeasurement?.measuredAt) {
+      return null
+    }
+    return `/api/withings/chart.png?range=30&v=${latestMeasurement.measuredAt}-${twitterChartPreviewVersion}`
+  }, [latestMeasurement?.measuredAt, twitterChartPreviewVersion])
 
   const handleHiddenTrigger = useCallback(() => {
     const now = Date.now()
@@ -919,6 +1150,10 @@ function App() {
       setAccessToken(null)
       setAdminEmail(null)
       setIsEditMode(false)
+      setTwitterStatus(null)
+      setTwitterTemplateDraft(DEFAULT_TWITTER_TEMPLATE)
+      setTwitterAutoPostEnabledDraft(true)
+      setIsTwitterTemplateDialogOpen(false)
       setIsAddFormOpen(false)
       setNewGearUrl('')
       setNewGearTitle('')
@@ -1880,8 +2115,25 @@ function App() {
         ) : null}
 
         {isAdminEditing ? (
-          <button className="mode-toggle-button" type="button" onClick={handleTwitterConnect} disabled={isTwitterAuthBusy}>
-            <span>{isTwitterAuthBusy ? 'X移動中...' : twitterAuthStatus ? 'X連携済み' : 'Xログイン'}</span>
+          <button
+            className="mode-toggle-button"
+            type="button"
+            onClick={handleOpenWithingsSettingsDialog}
+            disabled={isWithingsConnecting || isWithingsLoading}
+          >
+            <span>{labels.withingsSettingsButton}</span>
+          </button>
+        ) : null}
+
+        {isAdminEditing ? (
+          <button
+            className="mode-toggle-button"
+            type="button"
+            onClick={handleOpenTwitterTemplateDialog}
+            disabled={isTwitterTemplateSaving || isTwitterStatusLoading}
+            aria-label={labels.twitterTemplateEditAria}
+          >
+            <span>{labels.twitterSettingsButton}</span>
           </button>
         ) : null}
 
@@ -1983,16 +2235,10 @@ function App() {
         ))}
       </nav>
 
-      <section className="withings-zone" aria-label="withings">
+      <section id="weight-graph" className="withings-zone" aria-label="withings">
         <div className="withings-header">
           <h2 className="withings-heading">{labels.withingsHeading}</h2>
           <p className="withings-description">{labels.withingsDescription}</p>
-          {isEditMode ? (
-            <p className="withings-status">
-              <span className="withings-status-label">{labels.withingsStatusLabel}</span>
-              <span className={`withings-status-value${withingsStatus?.connected ? ' is-connected' : ''}`}>{withingsStatusValue}</span>
-            </p>
-          ) : null}
         </div>
         <div className="gear-filter-row">
           <button
@@ -2119,31 +2365,6 @@ function App() {
           ) : (
             <p className="withings-empty-note">{labels.withingsNoWorkout}</p>
           )}
-
-          {isAdminEditing ? (
-            <div className="withings-actions">
-              <button
-                className="withings-action-button"
-                type="button"
-                disabled={isWithingsConnecting || isWithingsSyncing}
-                onClick={() => {
-                  void handleWithingsConnect()
-                }}
-              >
-                {labels.withingsConnectButton}
-              </button>
-              <button
-                className="withings-action-button ghost"
-                type="button"
-                disabled={!withingsStatus?.connected || isWithingsSyncing || isWithingsConnecting}
-                onClick={() => {
-                  void handleWithingsSync()
-                }}
-              >
-                {labels.withingsSyncButton}
-              </button>
-            </div>
-          ) : null}
         </div>
       </section>
 
@@ -2450,6 +2671,82 @@ function App() {
           onChangeEn={setRenameCategoryValueEn}
           onSubmit={handleSubmitRenameCategory}
           onClose={handleCloseRenameCategoryDialog}
+        />
+      ) : null}
+
+      {isAdminEditing ? (
+        <WithingsSettingsDialog
+          isOpen={isWithingsSettingsDialogOpen}
+          isConnecting={isWithingsConnecting}
+          isSyncing={isWithingsSyncing}
+          title={labels.withingsSettingsDialogTitle}
+          description={labels.withingsConnectHint}
+          connectLabel={labels.withingsConnectButton}
+          syncLabel={labels.withingsSyncButton}
+          statusLabel={labels.withingsStatusLabel}
+          statusValue={withingsStatusValue}
+          userLabel={labels.withingsSettingsUserLabel}
+          userValue={withingsConnectedUserLabel}
+          lastSyncedLabel={labels.withingsSettingsLastSyncedLabel}
+          lastSyncedValue={withingsLastSyncedLabel}
+          onClose={handleCloseWithingsSettingsDialog}
+          onConnect={() => {
+            void handleWithingsConnect()
+          }}
+          onSync={() => {
+            void handleWithingsSync()
+          }}
+          canSync={Boolean(withingsStatus?.connected)}
+        />
+      ) : null}
+
+      {isAdminEditing ? (
+        <TwitterTemplateDialog
+          isOpen={isTwitterTemplateDialogOpen}
+          isSaving={isTwitterTemplateSaving}
+          isConnecting={isTwitterAuthBusy}
+          isTesting={isTwitterTestPosting}
+          title={labels.twitterTemplateDialogTitle}
+          description={labels.twitterTemplateDescription}
+          autoPostLabel={labels.twitterAutoPostLabel}
+          autoPostEnabled={twitterAutoPostEnabledDraft}
+          templateLabel={labels.twitterTemplateLabel}
+          placeholderTitle={labels.twitterTemplatePlaceholderTitle}
+          previewTitle={labels.twitterTemplatePreviewTitle}
+          chartPreviewTitle={labels.twitterTemplateChartPreviewTitle}
+          chartPreviewEmpty={labels.twitterTemplateChartPreviewEmpty}
+          chartPreviewRefreshLabel={labels.twitterTemplateChartPreviewRefresh}
+          saveLabel={isTwitterTemplateSaving ? labels.twitterTemplateSaving : labels.twitterTemplateSave}
+          connectLabel={
+            isTwitterAuthBusy
+              ? labels.twitterConnectingButton
+              : twitterStatus?.connected
+                ? labels.twitterTemplateReauthorize
+                : labels.twitterTemplateReconnect
+          }
+          testLabel={isTwitterTestPosting ? labels.twitterTemplateTesting : labels.twitterTemplateTest}
+          accountLabel={labels.twitterTemplateAccountLabel}
+          accountValue={twitterAccountLabel}
+          lastPostedLabel={labels.twitterTemplateLastPostedLabel}
+          lastPostedValue={twitterLastPostedLabel}
+          template={twitterTemplateDraft}
+          preview={twitterTemplatePreview}
+          chartPreviewUrl={twitterChartPreviewUrl}
+          placeholders={twitterTemplatePlaceholders}
+          onClose={handleCloseTwitterTemplateDialog}
+          onSubmit={handleSaveTwitterTemplate}
+          onConnect={() => {
+            void handleTwitterConnect()
+          }}
+          onTestPost={() => {
+            void handleTestTwitterPost()
+          }}
+          onSetAutoPostEnabled={setTwitterAutoPostEnabledDraft}
+          onSetTemplate={setTwitterTemplateDraft}
+          onInsertPlaceholder={handleInsertTwitterPlaceholder}
+          onRefreshChartPreview={() => {
+            setTwitterChartPreviewVersion(Date.now())
+          }}
         />
       ) : null}
 

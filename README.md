@@ -12,7 +12,7 @@ cp .dev.vars.example .dev.vars
 GitHub OAuth App を作成し、Authorization callback URL に `http://localhost:5173/api/auth/github/callback` を設定してください。
 
 X OAuth を使う場合は `.dev.vars` に `TWITTER_CLIENT_ID`（または `TWITTER_CONSUMER_KEY`）、必要に応じて `TWITTER_CLIENT_SECRET` / `TWITTER_CONSUMER_SECRET`、`TWITTER_BEARER_TOKEN` を設定し、Callback URL を `http://localhost:5173/api/twitter/auth/callback` に設定してください。  
-refresh token を取得するには `TWITTER_OAUTH_SCOPE` に `offline.access` を含めてください。
+Withings Webhook後にXへ画像付き投稿する場合は `TWITTER_OAUTH_SCOPE` に `tweet.write` `offline.access` `media.write` を含めてください。
 
 翻訳を有効にする場合は `.dev.vars` に `OPENAI_API_KEY`（必要に応じて `OPENAI_MODEL`）を設定してください。
 

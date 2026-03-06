@@ -221,8 +221,10 @@ tasks:
     cmds:
       - bash ./scripts/sync_workspace_env.sh pull
 
-  env:push:prod:remote:
-    desc: .prod.vars をCloudflareリモート環境へ反映（secret設定 + deploy）
+  prod:deploy:
+    desc: .prod.vars を使って production へ deploy（secret反映を含む）
+    aliases:
+      - env:push:prod:remote
     deps:
       - build
     cmds:

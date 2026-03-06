@@ -39,6 +39,31 @@ export type ImageSize = {
 
 export type AppLocale = 'ja' | 'en'
 
+export type TwitterConnection = {
+  userId: string
+  username: string | null
+  name: string | null
+  scope: string | null
+  accessExpiresAt: number | null
+  updatedAt: number
+}
+
+export type TwitterPostSettings = {
+  autoPostEnabled: boolean
+  template: string
+  lastPostedGroupId: number | null
+  lastPostedMeasuredAt: number | null
+  lastPostedTweetId: string | null
+  lastPostedTweetAt: number | null
+}
+
+export type TwitterStatus = {
+  ok: boolean
+  connected: boolean
+  connection: TwitterConnection | null
+  settings: TwitterPostSettings
+}
+
 export type WithingsConnection = {
   userId: string
   scope: string | null

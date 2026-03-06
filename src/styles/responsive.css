@@ -12,6 +12,11 @@
     gap: 0.32rem;
   }
 
+  .top-control-icon-button {
+    width: 34px;
+    height: 34px;
+  }
+
   .top-control-select {
     width: 34px;
     height: 34px;
@@ -61,6 +66,10 @@
   }
 
   .edit-image-fetch-row {
+    grid-template-columns: 1fr;
+  }
+
+  .twitter-template-meta {
     grid-template-columns: 1fr;
   }
 
