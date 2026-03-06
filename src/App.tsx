@@ -16,6 +16,7 @@ import { AuthDialog } from './components/AuthDialog'
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog'
 import { EditGearDialog } from './components/EditGearDialog'
 import { RenameCategoryDialog } from './components/RenameCategoryDialog'
+import { WithingsTrendChart } from './components/WithingsTrendChart'
 import {
   APP_LOCALE_STORAGE_KEY,
   APP_THEME_STORAGE_KEY,
@@ -30,13 +31,14 @@ import {
 } from './constants'
 import { useToast } from './hooks/useToast'
 import { useTypewriter } from './hooks/useTypewriter'
-import type { AddDialogStep, AppLocale, GearItem, ImageSize, LinkPreviewData } from './types'
-import { createIntroMessage, getAuthErrorMessage, normalizeGearItem, normalizeImageUrls } from './utils'
+import type { AddDialogStep, AppLocale, GearItem, ImageSize, LinkPreviewData, WithingsStatus, WithingsWorkoutDetailPoint } from './types'
+import { createIntroMessage, getAuthErrorMessage, getWithingsErrorMessage, normalizeGearItem, normalizeImageUrls } from './utils'
 
 type AppLocalePreference = AppLocale | 'system'
 type AppTheme = 'light' | 'dark'
 type AppThemePreference = AppTheme | 'system'
 const GEAR_PAGE_SIZE = 12
+const WITHINGS_STATUS_CACHE_KEY = 'withings-status-cache-v1'
 
 function detectSystemLocale(): AppLocale {
   if (typeof window === 'undefined') {
@@ -50,6 +52,25 @@ function detectSystemTheme(): AppTheme {
     return 'light'
   }
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+function loadCachedWithingsStatus(): WithingsStatus | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+  try {
+    const raw = window.localStorage.getItem(WITHINGS_STATUS_CACHE_KEY)
+    if (!raw) {
+      return null
+    }
+    const parsed = JSON.parse(raw) as WithingsStatus
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.connected !== 'boolean') {
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
 }
 
 function App() {
@@ -107,6 +128,11 @@ function App() {
   const { toast, setToast, showToast } = useToast()
   const [gearItems, setGearItems] = useState<GearItem[]>([])
   const [isGearLoading, setIsGearLoading] = useState(true)
+  const [withingsStatus, setWithingsStatus] = useState<WithingsStatus | null>(loadCachedWithingsStatus)
+  const [isWithingsLoading, setIsWithingsLoading] = useState(true)
+  const [isWithingsConnecting, setIsWithingsConnecting] = useState(false)
+  const [isWithingsSyncing, setIsWithingsSyncing] = useState(false)
+  const [selectedWithingsView, setSelectedWithingsView] = useState<'weight' | 'workout'>('weight')
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [adminEmail, setAdminEmail] = useState<string | null>(null)
   const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false)
@@ -312,6 +338,104 @@ function App() {
     [imageSizesByUrl],
   )
 
+  const formatWithingsMeasuredAt = useCallback(
+    (unixSeconds: number | null | undefined) => {
+      if (!unixSeconds || unixSeconds < 1) {
+        return '-'
+      }
+      return new Date(unixSeconds * 1000).toLocaleString(activeLanguage === 'ja' ? 'ja-JP' : 'en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    },
+    [activeLanguage],
+  )
+
+  const formatWeightKg = useCallback((value: number | null | undefined) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return '-'
+    }
+    return `${value.toFixed(2)} kg`
+  }, [])
+
+  const formatBmi = useCallback((value: number | null | undefined) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return '-'
+    }
+    return value.toFixed(2)
+  }, [])
+
+  const formatFatRatio = useCallback((value: number | null | undefined) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return '-'
+    }
+    return `${value.toFixed(2)} %`
+  }, [])
+
+  const formatDistanceMeters = useCallback((value: number | null | undefined) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return '-'
+    }
+    return `${(value / 1000).toFixed(2)} km`
+  }, [])
+
+  const formatCalories = useCallback((value: number | null | undefined) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return '-'
+    }
+    return `${value.toFixed(1)} kcal`
+  }, [])
+
+  const formatDuration = useCallback((value: number | null | undefined) => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 1) {
+      return '-'
+    }
+    const total = Math.trunc(value)
+    const h = Math.floor(total / 3600)
+    const m = Math.floor((total % 3600) / 60)
+    const s = total % 60
+    if (h > 0) {
+      return `${h}h ${m}m ${s}s`
+    }
+    return `${m}m ${s}s`
+  }, [])
+
+  const formatWithingsMetricValue = useCallback(
+    (
+      value: number | null | undefined,
+      unit: string | null | undefined,
+      valueText?: string | null,
+    ) => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        const normalizedUnit = unit?.trim() ?? ''
+        const renderedValue = Number.isInteger(value) ? String(value) : value.toFixed(2)
+        return normalizedUnit ? `${renderedValue} ${normalizedUnit}` : renderedValue
+      }
+      if (typeof valueText === 'string' && valueText.trim()) {
+        const trimmed = valueText.trim()
+        return trimmed.length > 140 ? `${trimmed.slice(0, 137)}...` : trimmed
+      }
+      return '-'
+    },
+    [],
+  )
+
+  const formatWorkoutDetailValue = useCallback(
+    (detail: WithingsWorkoutDetailPoint) => {
+      if (detail.key === 'data.distance' || detail.key === 'data.manual_distance') {
+        return formatDistanceMeters(detail.value)
+      }
+      if (detail.key === 'data.calories' || detail.key === 'data.manual_calories') {
+        return formatCalories(detail.value)
+      }
+      if (detail.key === 'data.duration') {
+        return formatDuration(detail.value)
+      }
+      return formatWithingsMetricValue(detail.value, detail.unit, detail.valueText)
+    },
+    [formatCalories, formatDistanceMeters, formatDuration, formatWithingsMetricValue],
+  )
+
   const parseApiResponse = useCallback(async (response: Response) => {
     const data = await response.json().catch(() => null)
     if (!response.ok) {
@@ -357,10 +481,28 @@ function App() {
     }
   }, [parseApiResponse, sortGearItems])
 
+  const loadWithingsStatus = useCallback(async () => {
+    setIsWithingsLoading(true)
+    try {
+      const response = await fetch('/api/withings/status')
+      const data = await parseApiResponse(response)
+      const nextStatus = data as unknown as WithingsStatus
+      setWithingsStatus(nextStatus)
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(WITHINGS_STATUS_CACHE_KEY, JSON.stringify(nextStatus))
+      }
+    } catch {
+      // 取得失敗時は前回の表示を維持し、ちらつきを防ぐ。
+    } finally {
+      setIsWithingsLoading(false)
+    }
+  }, [parseApiResponse])
+
   useEffect(() => {
     void loadGearItems()
+    void loadWithingsStatus()
     void refreshAccessToken()
-  }, [loadGearItems, refreshAccessToken])
+  }, [loadGearItems, loadWithingsStatus, refreshAccessToken])
 
   useEffect(() => {
     const url = new URL(window.location.href)
@@ -373,6 +515,27 @@ function App() {
     url.searchParams.delete('auth_error')
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
   }, [])
+
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const withingsError = url.searchParams.get('withings_error')
+    const withingsStatusQuery = url.searchParams.get('withings')
+    if (!withingsError && !withingsStatusQuery) {
+      return
+    }
+
+    if (withingsError) {
+      const tone = withingsError === 'withings_notify_subscribe_failed' && withingsStatusQuery === 'connected' ? 'info' : 'error'
+      showToast(getWithingsErrorMessage(withingsError), tone)
+    } else if (withingsStatusQuery === 'connected') {
+      showToast(activeLanguage === 'ja' ? 'Withings連携が完了しました。' : 'Withings has been connected.', 'success')
+    }
+
+    url.searchParams.delete('withings_error')
+    url.searchParams.delete('withings')
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
+    void loadWithingsStatus()
+  }, [activeLanguage, loadWithingsStatus, showToast])
 
   useEffect(() => {
     if (selectedCategory === 'all') {
@@ -477,6 +640,69 @@ function App() {
     },
     [accessToken, parseApiResponse, refreshAccessToken],
   )
+
+  const handleWithingsConnect = useCallback(async () => {
+    if (isWithingsConnecting) {
+      return
+    }
+    setIsWithingsConnecting(true)
+    try {
+      const data = await requestWithAuth('/api/admin/withings/connect', {
+        method: 'POST',
+      })
+      const authorizeUrl = typeof data.authorizeUrl === 'string' ? data.authorizeUrl.trim() : ''
+      if (!authorizeUrl) {
+        throw new Error('Withings認証URLの取得に失敗しました')
+      }
+      window.location.assign(authorizeUrl)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : activeLanguage === 'ja'
+            ? 'Withings連携の開始に失敗しました。'
+            : 'Failed to start Withings authorization.'
+      showToast(message, 'error')
+      setIsWithingsConnecting(false)
+    }
+  }, [activeLanguage, isWithingsConnecting, requestWithAuth, showToast])
+
+  const handleWithingsSync = useCallback(async () => {
+    if (isWithingsSyncing) {
+      return
+    }
+    setIsWithingsSyncing(true)
+    try {
+      await requestWithAuth('/api/admin/withings/sync', {
+        method: 'POST',
+      })
+      await loadWithingsStatus()
+      showToast(activeLanguage === 'ja' ? 'Withingsデータを同期しました。' : 'Withings data synced.', 'success')
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : activeLanguage === 'ja'
+            ? 'Withings同期に失敗しました。'
+            : 'Failed to sync Withings data.'
+      showToast(message, 'error')
+    } finally {
+      setIsWithingsSyncing(false)
+    }
+  }, [activeLanguage, isWithingsSyncing, loadWithingsStatus, requestWithAuth, showToast])
+
+  const withingsStatusValue = isWithingsLoading
+    ? labels.withingsStatusLoading
+    : withingsStatus?.connected
+      ? labels.withingsStatusConnected
+      : labels.withingsStatusPending
+  const latestMeasurement = withingsStatus?.latestMeasurement ?? null
+  const recentWorkouts = withingsStatus?.recentWorkouts ?? []
+  const recentWeights = withingsStatus?.recentWeights ?? []
+  const latestWeightLabel = formatWeightKg(latestMeasurement?.weightKg)
+  const latestFatRatioLabel = formatFatRatio(latestMeasurement?.fatRatio)
+  const latestBmiLabel = formatBmi(latestMeasurement?.bmi)
+  const latestMeasuredAtLabel = formatWithingsMeasuredAt(latestMeasurement?.measuredAt)
 
   const handleHiddenTrigger = useCallback(() => {
     const now = Date.now()
@@ -1573,6 +1799,179 @@ function App() {
           </a>
         ))}
       </nav>
+
+      <section className="withings-zone" aria-label="withings">
+        <div className="withings-header">
+          <h2 className="withings-heading">{labels.withingsHeading}</h2>
+          <p className="withings-description">{labels.withingsDescription}</p>
+          {isEditMode ? (
+            <p className="withings-status">
+              <span className="withings-status-label">{labels.withingsStatusLabel}</span>
+              <span className={`withings-status-value${withingsStatus?.connected ? ' is-connected' : ''}`}>{withingsStatusValue}</span>
+            </p>
+          ) : null}
+        </div>
+        <div className="gear-filter-row">
+          <button
+            type="button"
+            className={`gear-filter-chip${selectedWithingsView === 'weight' ? ' is-active' : ''}`}
+            onClick={() => setSelectedWithingsView('weight')}
+          >
+            {labels.withingsViewWeight}
+          </button>
+          <button
+            type="button"
+            className={`gear-filter-chip${selectedWithingsView === 'workout' ? ' is-active' : ''}`}
+            onClick={() => setSelectedWithingsView('workout')}
+          >
+            {labels.withingsViewWorkout}
+          </button>
+        </div>
+        <div className="withings-card">
+          {selectedWithingsView === 'weight' && isWithingsLoading ? (
+            <div className="withings-loading-skeleton" aria-hidden="true">
+              <div className="withings-summary withings-summary-skeleton">
+                <p className="withings-summary-item">
+                  <span className="withings-skeleton-line is-label" />
+                  <span className="withings-skeleton-line is-value" />
+                </p>
+                <p className="withings-summary-item">
+                  <span className="withings-skeleton-line is-label" />
+                  <span className="withings-skeleton-line is-value" />
+                </p>
+                <p className="withings-summary-item">
+                  <span className="withings-skeleton-line is-label" />
+                  <span className="withings-skeleton-line is-value" />
+                </p>
+                <p className="withings-summary-item">
+                  <span className="withings-skeleton-line is-label" />
+                  <span className="withings-skeleton-line is-value" />
+                </p>
+              </div>
+              <div className="withings-trend-skeleton">
+                <span className="withings-skeleton-line is-title" />
+                <span className="withings-skeleton-line is-chart" />
+              </div>
+            </div>
+          ) : selectedWithingsView === 'weight' ? (
+            <>
+              <div className="withings-summary">
+                <p className="withings-summary-item">
+                  <span className="withings-summary-label">{labels.withingsLatestWeightLabel}</span>
+                  <span className="withings-metric-value">{latestWeightLabel}</span>
+                </p>
+                <p className="withings-summary-item">
+                  <span className="withings-summary-label">{labels.withingsChartFatRatio}</span>
+                  <span className="withings-metric-value">{latestFatRatioLabel}</span>
+                </p>
+                <p className="withings-summary-item">
+                  <span className="withings-summary-label">{labels.withingsChartBmi}</span>
+                  <span className="withings-metric-value">{latestBmiLabel}</span>
+                </p>
+                <p className="withings-summary-item">
+                  <span className="withings-summary-label">{labels.withingsLastMeasuredLabel}</span>
+                  <span className="withings-metric-value">{latestMeasuredAtLabel}</span>
+                </p>
+              </div>
+              <WithingsTrendChart
+                points={recentWeights}
+                locale={activeLanguage}
+                labels={{
+                  title: labels.withingsTrendTitle,
+                  noData: labels.withingsTrendNoData,
+                  range7: labels.withingsRange7,
+                  range30: labels.withingsRange30,
+                  range90: labels.withingsRange90,
+                  weight: labels.withingsChartWeight,
+                  bmi: labels.withingsChartBmi,
+                  fatRatio: labels.withingsChartFatRatio,
+                }}
+              />
+              {latestMeasurement?.measuredAt ? null : <p className="withings-empty-note">{labels.withingsNoMeasurement}</p>}
+            </>
+          ) : isWithingsLoading ? (
+            <p className="withings-empty-note">{labels.withingsLoadingDetail}</p>
+          ) : recentWorkouts.length > 0 ? (
+            <>
+              {recentWorkouts.map((workout, index) => {
+                const typeLabel = activeLanguage === 'ja' ? workout.workoutCategoryLabelJa : workout.workoutCategoryLabelEn
+                const whenLabel = formatWithingsMeasuredAt(workout.startAt ?? workout.measuredAt)
+                const workoutDetails = Array.isArray(workout.details) ? workout.details : []
+                const detailByKey = new Map(workoutDetails.map((detail) => [detail.key, detail] as const))
+                const caloriesDetail = detailByKey.get('data.manual_calories') ?? detailByKey.get('data.calories')
+                const distanceDetail = detailByKey.get('data.manual_distance') ?? detailByKey.get('data.distance')
+                const stepsDetail = detailByKey.get('data.steps')
+                const durationDetail = detailByKey.get('data.duration')
+
+                const caloriesLabel = caloriesDetail ? formatWorkoutDetailValue(caloriesDetail) : formatCalories(workout.caloriesKcal)
+                const distanceLabel = distanceDetail ? formatWorkoutDetailValue(distanceDetail) : formatDistanceMeters(workout.distanceMeters)
+                const stepsLabel = stepsDetail
+                  ? formatWorkoutDetailValue(stepsDetail)
+                  : typeof workout.steps === 'number' && Number.isFinite(workout.steps)
+                    ? `${Math.trunc(workout.steps)}`
+                    : '-'
+                const durationLabel = durationDetail ? formatWorkoutDetailValue(durationDetail) : formatDuration(workout.durationSec)
+
+                return (
+                  <div key={`${workout.dataKey}:${index}`} className="withings-metrics withings-workout-metrics">
+                    <p className="withings-metric withings-workout-metric">
+                      <span className="withings-metric-label withings-workout-label">{labels.withingsWorkoutTypeLabel}</span>
+                      <span className="withings-metric-value">{typeLabel}</span>
+                    </p>
+                    <p className="withings-metric withings-workout-metric">
+                      <span className="withings-metric-label withings-workout-label">{labels.withingsWorkoutDateLabel}</span>
+                      <span className="withings-metric-value">{whenLabel}</span>
+                    </p>
+                    <p className="withings-metric withings-workout-metric">
+                      <span className="withings-metric-label withings-workout-label">{labels.withingsWorkoutCaloriesLabel}</span>
+                      <span className="withings-metric-value">{caloriesLabel}</span>
+                    </p>
+                    <p className="withings-metric withings-workout-metric">
+                      <span className="withings-metric-label withings-workout-label">{labels.withingsWorkoutDurationLabel}</span>
+                      <span className="withings-metric-value">{durationLabel}</span>
+                    </p>
+                    <p className="withings-metric withings-workout-metric">
+                      <span className="withings-metric-label withings-workout-label">{labels.withingsWorkoutStepsLabel}</span>
+                      <span className="withings-metric-value">{stepsLabel}</span>
+                    </p>
+                    <p className="withings-metric withings-workout-metric">
+                      <span className="withings-metric-label withings-workout-label">{labels.withingsWorkoutDistanceLabel}</span>
+                      <span className="withings-metric-value">{distanceLabel}</span>
+                    </p>
+                  </div>
+                )
+              })}
+            </>
+          ) : (
+            <p className="withings-empty-note">{labels.withingsNoWorkout}</p>
+          )}
+
+          {isAdminEditing ? (
+            <div className="withings-actions">
+              <button
+                className="withings-action-button"
+                type="button"
+                disabled={isWithingsConnecting || isWithingsSyncing}
+                onClick={() => {
+                  void handleWithingsConnect()
+                }}
+              >
+                {labels.withingsConnectButton}
+              </button>
+              <button
+                className="withings-action-button ghost"
+                type="button"
+                disabled={!withingsStatus?.connected || isWithingsSyncing || isWithingsConnecting}
+                onClick={() => {
+                  void handleWithingsSync()
+                }}
+              >
+                {labels.withingsSyncButton}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </section>
 
       <section className="gear-zone" aria-label="setup">
         <div className="gear-header">
