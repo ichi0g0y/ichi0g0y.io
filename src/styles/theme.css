@@ -1,10 +1,13 @@
+html[data-theme='dark'],
 body[data-theme='dark'] {
-  background: #0b1220;
-  color: #e2e8f0;
+  --app-top-background: #111b2f;
+  --app-page-background: #0b1220;
+  --app-text-color: #e2e8f0;
+  color: var(--app-text-color);
 }
 
 body[data-theme='dark'] .page {
-  color: #e2e8f0;
+  color: var(--app-text-color);
 }
 
 body[data-theme='dark'] .title-area,

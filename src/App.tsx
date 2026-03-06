@@ -189,6 +189,7 @@ function App() {
   const addDialogUrlInputRef = useRef<HTMLInputElement | null>(null)
   const gearCategoryRowRef = useRef<HTMLDivElement | null>(null)
   const gearLoadMoreRef = useRef<HTMLDivElement | null>(null)
+  const titleAreaRef = useRef<HTMLElement | null>(null)
   const tapStateRef = useRef({ count: 0, lastTappedAt: 0 })
   const isAdminEditing = Boolean(accessToken && isEditMode)
   const isModeToggleLocked = isAdding || isFetchingPreview || isUpdating || deletingGearId !== null || isRenamingCategory
@@ -266,6 +267,7 @@ function App() {
     }
     window.localStorage.setItem(APP_THEME_STORAGE_KEY, themePreference)
     window.document.body.dataset.theme = activeTheme
+    window.document.documentElement.dataset.theme = activeTheme
   }, [activeTheme, themePreference])
 
   useEffect(() => {
@@ -295,6 +297,43 @@ function App() {
       mediaQuery.removeEventListener('change', handleThemeChange)
     }
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    const titleArea = titleAreaRef.current
+    if (!titleArea) {
+      return
+    }
+    const documentElement = window.document.documentElement
+    const body = window.document.body
+    const updateRootBackground = () => {
+      const rootStyle = window.getComputedStyle(documentElement)
+      const topBackground = rootStyle.getPropertyValue('--app-top-background').trim()
+      const pageBackground = rootStyle.getPropertyValue('--app-page-background').trim()
+      const nextBackground = window.scrollY < titleArea.offsetHeight ? topBackground || '#ffffff' : pageBackground || '#efefef'
+
+      documentElement.style.setProperty('--app-root-background', nextBackground)
+      body.style.setProperty('--app-root-background', nextBackground)
+    }
+
+    updateRootBackground()
+    const resizeObserver = new ResizeObserver(() => {
+      updateRootBackground()
+    })
+    resizeObserver.observe(titleArea)
+    window.addEventListener('resize', updateRootBackground)
+    window.addEventListener('scroll', updateRootBackground, { passive: true })
+
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', updateRootBackground)
+      window.removeEventListener('scroll', updateRootBackground)
+      documentElement.style.removeProperty('--app-root-background')
+      body.style.removeProperty('--app-root-background')
+    }
+  }, [activeTheme])
   const newGearPrimaryImageUrl = newGearImageUrls[0] ?? null
 
   const handlePreviewImageLoad = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
@@ -1760,7 +1799,7 @@ function App() {
         </div>
       </div>
 
-      <section className="title-area" aria-label="profile header">
+      <section ref={titleAreaRef} className="title-area" aria-label="profile header">
         <img className="main-image" src="/usagi_toilet.png" alt="うさぎのイラスト" />
 
         <div className="name-block" aria-label="name">
