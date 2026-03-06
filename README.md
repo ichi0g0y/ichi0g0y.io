@@ -88,10 +88,10 @@ task worker-tail-remote
 Withingsなど固定URLが必要な連携向けに、`workers.dev` へ remote デプロイする場合:
 
 ```bash
-task env:push:remote
+task remote:deploy
 ```
 
-`task env:push:remote` は `.dev.vars` を `env.remote` へ反映し、`APP_ORIGIN` は `https://<worker-name>.<subdomain>.workers.dev` に自動設定します。
+`task remote:deploy` は `.dev.vars` を `env.remote` へ反映し、`APP_ORIGIN` は `https://<worker-name>.<subdomain>.workers.dev` に自動設定したうえで remote deploy します。
 
 Withings OAuth App の Callback URL は、remote固定URLに合わせて次を設定してください。
 

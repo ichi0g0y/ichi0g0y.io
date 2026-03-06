@@ -1566,7 +1566,10 @@ function App() {
       setEditImageCandidates(mergedImageCandidates)
       if (mergedImageCandidates.length < 1) {
         showToast('候補画像が見つかりませんでした', 'info')
+        return
       }
+      setEditImageUrls(mergedImageCandidates)
+      showToast('候補画像を再取得しました。更新すると反映されます。', 'success')
     } catch (error) {
       const message = error instanceof Error ? error.message : '候補画像の取得に失敗しました'
       showToast(message, 'error')

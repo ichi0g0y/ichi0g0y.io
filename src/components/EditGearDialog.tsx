@@ -199,6 +199,7 @@ export function EditGearDialog({
                 {isFetchingEditPreview ? '取得中...' : '候補画像を再取得'}
               </button>
             </div>
+            <p className="add-dialog-note">再取得すると現在の画像を候補画像で置き換えます。不要な画像は更新前に外せます。</p>
             {editImageCandidates.length > 0 ? (
               <div className="image-candidate-grid">
                 {editImageCandidates.map((candidateUrl, index) => {
