@@ -6,6 +6,12 @@ export interface Env {
   GITHUB_CLIENT_ID: string
   GITHUB_CLIENT_SECRET: string
   ALLOWED_GITHUB_LOGINS: string
+  TWITTER_CLIENT_ID?: string
+  TWITTER_CLIENT_SECRET?: string
+  TWITTER_CONSUMER_KEY?: string
+  TWITTER_CONSUMER_SECRET?: string
+  TWITTER_BEARER_TOKEN?: string
+  TWITTER_OAUTH_SCOPE?: string
   OPENAI_API_KEY?: string
   OPENAI_MODEL?: string
   APP_ORIGIN?: string

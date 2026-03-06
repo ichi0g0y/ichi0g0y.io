@@ -51,6 +51,21 @@ export function getAuthErrorMessage(errorCode: string) {
   }
 }
 
+export function getTwitterAuthErrorMessage(errorCode: string) {
+  switch (errorCode) {
+    case 'twitter_oauth_denied':
+      return 'Xログインがキャンセルされました。'
+    case 'twitter_state_mismatch':
+      return 'Xログイン処理の整合性チェックに失敗しました。再試行してください。'
+    case 'twitter_token_exchange_failed':
+      return 'Xトークンの取得に失敗しました。'
+    case 'twitter_config_error':
+      return 'X OAuth の設定が不足しています。'
+    default:
+      return 'Xログインに失敗しました。'
+  }
+}
+
 export function getWithingsErrorMessage(errorCode: string) {
   switch (errorCode) {
     case 'withings_oauth_denied':

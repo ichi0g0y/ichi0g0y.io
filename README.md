@@ -11,6 +11,9 @@ cp .dev.vars.example .dev.vars
 
 GitHub OAuth App を作成し、Authorization callback URL に `http://localhost:5173/api/auth/github/callback` を設定してください。
 
+X OAuth を使う場合は `.dev.vars` に `TWITTER_CLIENT_ID`（または `TWITTER_CONSUMER_KEY`）、必要に応じて `TWITTER_CLIENT_SECRET` / `TWITTER_CONSUMER_SECRET`、`TWITTER_BEARER_TOKEN` を設定し、Callback URL を `http://localhost:5173/api/twitter/auth/callback` に設定してください。  
+refresh token を取得するには `TWITTER_OAUTH_SCOPE` に `offline.access` を含めてください。
+
 翻訳を有効にする場合は `.dev.vars` に `OPENAI_API_KEY`（必要に応じて `OPENAI_MODEL`）を設定してください。
 
 Withings 連携を有効にする場合は `.dev.vars` に `WITHINGS_CLIENT_ID` と `WITHINGS_CLIENT_SECRET`、`WITHINGS_PUBLIC_ORIGIN`（必要なら `WITHINGS_CALLBACK_URL` / `WITHINGS_NOTIFY_CALLBACK_URL` / `WITHINGS_NOTIFY_SECRET` / `WITHINGS_OAUTH_SCOPE`）を設定してください。
@@ -173,5 +176,6 @@ bun run build
 - Twitch / X / GitHub の外部リンクを掲載
 - 1ページ完結のSPA
 - 隠し管理モード（GitHub OAuth + access/refresh token）
+- 編集モード限定の X OAuth トークン取得（access token / refresh token）
 - URLからOG情報を取得して機材カードを追加
 - 管理画面で登録/更新した画像URLはR2へバックアップし、リモートでは `s3*.ichi0g0y.io/<id>` の公開URLで配信

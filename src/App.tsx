@@ -32,15 +32,64 @@ import {
 import { useToast } from './hooks/useToast'
 import { useTypewriter } from './hooks/useTypewriter'
 import type { AddDialogStep, AppLocale, GearItem, ImageSize, LinkPreviewData, WithingsStatus, WithingsWorkoutDetailPoint } from './types'
-import { createIntroMessage, getAuthErrorMessage, getWithingsErrorMessage, normalizeGearItem, normalizeImageUrls } from './utils'
+import {
+  createIntroMessage,
+  getAuthErrorMessage,
+  getTwitterAuthErrorMessage,
+  getWithingsErrorMessage,
+  normalizeGearItem,
+  normalizeImageUrls,
+} from './utils'
 
 type AppLocalePreference = AppLocale | 'system'
 type AppTheme = 'light' | 'dark'
 type AppThemePreference = AppTheme | 'system'
 const GEAR_PAGE_SIZE = 12
+const TWITTER_AUTH_STATUS_STORAGE_KEY = 'twitter-auth-status-v1'
 const WITHINGS_STATUS_CACHE_KEY = 'withings-status-cache-v1'
 const EMPTY_WITHINGS_WORKOUTS: NonNullable<WithingsStatus['recentWorkouts']> = []
 const EMPTY_WITHINGS_WEIGHTS: NonNullable<WithingsStatus['recentWeights']> = []
+
+type TwitterAuthStatus = {
+  username: string | null
+  obtainedAt: string
+}
+
+function loadTwitterAuthStatus(): TwitterAuthStatus | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(TWITTER_AUTH_STATUS_STORAGE_KEY)
+    if (!raw) {
+      return null
+    }
+    const parsed = JSON.parse(raw) as TwitterAuthStatus
+    if (!parsed || typeof parsed !== 'object') {
+      return null
+    }
+    return {
+      username: parsed.username ?? null,
+      obtainedAt: typeof parsed.obtainedAt === 'string' && parsed.obtainedAt ? parsed.obtainedAt : new Date().toISOString(),
+    }
+  } catch {
+    return null
+  }
+}
+
+function persistTwitterAuthStatus(value: TwitterAuthStatus | null) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  if (!value) {
+    window.sessionStorage.removeItem(TWITTER_AUTH_STATUS_STORAGE_KEY)
+    return
+  }
+
+  window.sessionStorage.setItem(TWITTER_AUTH_STATUS_STORAGE_KEY, JSON.stringify(value))
+}
 
 function detectSystemLocale(): AppLocale {
   if (typeof window === 'undefined') {
@@ -141,6 +190,8 @@ function App() {
   const [authMessage, setAuthMessage] = useState('')
   const [isAuthBusy, setIsAuthBusy] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [twitterAuthStatus, setTwitterAuthStatus] = useState<TwitterAuthStatus | null>(loadTwitterAuthStatus)
+  const [isTwitterAuthBusy, setIsTwitterAuthBusy] = useState(false)
   const [isAddFormOpen, setIsAddFormOpen] = useState(false)
   const [newGearUrl, setNewGearUrl] = useState('')
   const [newGearTitle, setNewGearTitle] = useState('')
@@ -559,6 +610,50 @@ function App() {
 
   useEffect(() => {
     const url = new URL(window.location.href)
+    const hashParams = new URLSearchParams(window.location.hash.startsWith('#') ? window.location.hash.slice(1) : '')
+    const twitterError = url.searchParams.get('twitter_error')
+    const twitterStatusQuery = url.searchParams.get('twitter')
+    const twitterAccessToken = hashParams.get('twitter_access_token')?.trim() ?? ''
+    const hasTwitterPayload = Boolean(twitterError || twitterStatusQuery || twitterAccessToken)
+
+    if (!hasTwitterPayload) {
+      return
+    }
+
+    if (twitterError) {
+      showToast(getTwitterAuthErrorMessage(twitterError), 'error')
+    } else if (twitterAccessToken) {
+      const nextTwitterAuthStatus: TwitterAuthStatus = {
+        username: hashParams.get('twitter_username')?.trim() || null,
+        obtainedAt: new Date().toISOString(),
+      }
+      setTwitterAuthStatus(nextTwitterAuthStatus)
+      persistTwitterAuthStatus(nextTwitterAuthStatus)
+      setIsEditMode(true)
+      showToast(activeLanguage === 'ja' ? 'Xログインが完了しました。' : 'X login completed.', 'success')
+    }
+
+    setIsTwitterAuthBusy(false)
+
+    url.searchParams.delete('twitter')
+    url.searchParams.delete('twitter_error')
+    for (const key of [
+      'twitter_access_token',
+      'twitter_refresh_token',
+      'twitter_token_type',
+      'twitter_scope',
+      'twitter_expires_in',
+      'twitter_user_id',
+      'twitter_username',
+    ]) {
+      hashParams.delete(key)
+    }
+    const nextHash = hashParams.toString()
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${nextHash ? `#${nextHash}` : ''}`)
+  }, [activeLanguage, showToast])
+
+  useEffect(() => {
+    const url = new URL(window.location.href)
     const withingsError = url.searchParams.get('withings_error')
     const withingsStatusQuery = url.searchParams.get('withings')
     if (!withingsError && !withingsStatusQuery) {
@@ -707,6 +802,32 @@ function App() {
       setIsWithingsConnecting(false)
     }
   }, [activeLanguage, isWithingsConnecting, requestWithAuth, showToast])
+
+  const handleTwitterConnect = useCallback(async () => {
+    if (isTwitterAuthBusy) {
+      return
+    }
+    setIsTwitterAuthBusy(true)
+    try {
+      const data = await requestWithAuth('/api/admin/twitter/connect', {
+        method: 'POST',
+      })
+      const authorizeUrl = typeof data.authorizeUrl === 'string' ? data.authorizeUrl.trim() : ''
+      if (!authorizeUrl) {
+        throw new Error('X認証URLの取得に失敗しました')
+      }
+      window.location.assign(authorizeUrl)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : activeLanguage === 'ja'
+            ? 'X連携の開始に失敗しました。'
+            : 'Failed to start X authorization.'
+      showToast(message, 'error')
+      setIsTwitterAuthBusy(false)
+    }
+  }, [activeLanguage, isTwitterAuthBusy, requestWithAuth, showToast])
 
   const handleWithingsSync = useCallback(async () => {
     if (isWithingsSyncing) {
@@ -1755,6 +1876,12 @@ function App() {
           >
             {isEditMode ? <Pencil2Icon /> : <EyeOpenIcon />}
             <span>{isEditMode ? labels.modeEdit : labels.modeView}</span>
+          </button>
+        ) : null}
+
+        {isAdminEditing ? (
+          <button className="mode-toggle-button" type="button" onClick={handleTwitterConnect} disabled={isTwitterAuthBusy}>
+            <span>{isTwitterAuthBusy ? 'X移動中...' : twitterAuthStatus ? 'X連携済み' : 'Xログイン'}</span>
           </button>
         ) : null}
 

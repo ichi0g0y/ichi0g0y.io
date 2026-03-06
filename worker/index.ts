@@ -10,6 +10,7 @@ import {
   handleUpdateGearItem,
 } from './gear'
 import { handleGetImageById } from './image-store'
+import { handleTwitterOAuthCallback, handleTwitterOAuthStart } from './twitter-auth'
 import type { Env } from './types'
 import { appendCorsHeaders, errorResponse, preflightResponse } from './utils'
 import {
@@ -49,6 +50,10 @@ async function routeApi(request: Request, env: Env, ctx?: ExecutionContext) {
 
   if (method === 'POST' && pathname === '/api/auth/logout') {
     return handleLogout(request, env)
+  }
+
+  if (method === 'GET' && pathname === '/api/twitter/auth/callback') {
+    return handleTwitterOAuthCallback(request, env)
   }
 
   if (method === 'GET' && pathname === '/api/preview') {
@@ -136,6 +141,14 @@ async function routeApi(request: Request, env: Env, ctx?: ExecutionContext) {
       return errorResponse('認証が必要です', 401)
     }
     return handleWithingsAuthStart(request, env)
+  }
+
+  if (method === 'POST' && pathname === '/api/admin/twitter/connect') {
+    const auth = await requireAuth(request, env)
+    if (!auth) {
+      return errorResponse('認証が必要です', 401)
+    }
+    return handleTwitterOAuthStart(request, env)
   }
 
   if (method === 'POST' && pathname === '/api/admin/withings/sync') {
