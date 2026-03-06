@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 import type { AppLocale, WithingsWeightPoint } from '../types'
@@ -29,10 +29,15 @@ type ChartPoint = {
 
 const RANGE_OPTIONS = [7, 30, 90] as const
 
-export function WithingsTrendChart({ points, locale, labels }: WithingsTrendChartProps) {
+function WithingsTrendChartComponent({ points, locale, labels }: WithingsTrendChartProps) {
   const [activeRangeDays, setActiveRangeDays] = useState<(typeof RANGE_OPTIONS)[number]>(90)
-  const nowSec = Math.floor(Date.now() / 1000)
-  const rangeStart = nowSec - activeRangeDays * 24 * 60 * 60
+  const [rangeAnchorSec, setRangeAnchorSec] = useState(() => Math.floor(Date.now() / 1000))
+  const latestMeasuredAt = useMemo(() => points.reduce((latest, point) => Math.max(latest, point.measuredAt), 0), [points])
+  const effectiveRangeAnchorSec = Math.max(rangeAnchorSec, latestMeasuredAt)
+  const rangeStart = useMemo(
+    () => effectiveRangeAnchorSec - activeRangeDays * 24 * 60 * 60,
+    [activeRangeDays, effectiveRangeAnchorSec],
+  )
 
   const chartData = useMemo(() => {
     return points
@@ -46,35 +51,44 @@ export function WithingsTrendChart({ points, locale, labels }: WithingsTrendChar
       .sort((left, right) => left.measuredAt - right.measuredAt)
   }, [points, rangeStart])
 
-  const axisDateFormatter = (unixSeconds: number) =>
-    new Date(unixSeconds * 1000).toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US', {
-      month: 'numeric',
-      day: 'numeric',
-    })
+  const axisDateFormatter = useCallback(
+    (unixSeconds: number) =>
+      new Date(unixSeconds * 1000).toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US', {
+        month: 'numeric',
+        day: 'numeric',
+      }),
+    [locale],
+  )
 
-  const tooltipLabelFormatter = (unixSeconds: number) =>
-    new Date(unixSeconds * 1000).toLocaleString(locale === 'ja' ? 'ja-JP' : 'en-US', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    })
+  const tooltipLabelFormatter = useCallback(
+    (unixSeconds: number) =>
+      new Date(unixSeconds * 1000).toLocaleString(locale === 'ja' ? 'ja-JP' : 'en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }),
+    [locale],
+  )
 
-  const tooltipValueFormatter = (value: number | string, name: string) => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-      return ['-', name]
-    }
-    if (name === labels.weight) {
-      return [`${value.toFixed(2)} kg`, name]
-    }
-    if (name === labels.bmi) {
+  const tooltipValueFormatter = useCallback(
+    (value: number | string, name: string) => {
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return ['-', name]
+      }
+      if (name === labels.weight) {
+        return [`${value.toFixed(2)} kg`, name]
+      }
+      if (name === labels.bmi) {
+        return [value.toFixed(2), name]
+      }
+      if (name === labels.fatRatio) {
+        return [`${value.toFixed(2)} %`, name]
+      }
       return [value.toFixed(2), name]
-    }
-    if (name === labels.fatRatio) {
-      return [`${value.toFixed(2)} %`, name]
-    }
-    return [value.toFixed(2), name]
-  }
+    },
+    [labels.bmi, labels.fatRatio, labels.weight],
+  )
 
-  const renderWeightLabel = (props: { x?: unknown; y?: unknown; value?: unknown }) => {
+  const renderWeightLabel = useCallback((props: { x?: unknown; y?: unknown; value?: unknown }) => {
     const { x, y, value } = props
     const parsedX = typeof x === 'number' ? x : Number(x)
     const parsedY = typeof y === 'number' ? y : Number(y)
@@ -94,47 +108,74 @@ export function WithingsTrendChart({ points, locale, labels }: WithingsTrendChar
         {parsedValue.toFixed(1)}
       </text>
     )
-  }
+  }, [])
+
+  const handleRangeChange = useCallback((nextRangeDays: (typeof RANGE_OPTIONS)[number]) => {
+    setActiveRangeDays(nextRangeDays)
+    setRangeAnchorSec(Math.floor(Date.now() / 1000))
+  }, [])
+
+  const tooltipContentStyle = useMemo(
+    () => ({
+      background: 'var(--withings-tooltip-bg)',
+      color: 'var(--withings-tooltip-text)',
+      border: 'none',
+      borderRadius: '12px',
+      boxShadow: 'var(--withings-tooltip-shadow)',
+      padding: '0.52rem 0.62rem',
+    }),
+    [],
+  )
+  const tooltipLabelStyle = useMemo(
+    () => ({
+      color: 'var(--withings-tooltip-text)',
+      fontSize: '0.72rem',
+      fontWeight: 700,
+      marginBottom: '0.2rem',
+    }),
+    [],
+  )
+  const tooltipItemStyle = useMemo(
+    () => ({
+      color: 'var(--withings-tooltip-text)',
+      fontSize: '0.74rem',
+      paddingTop: '0.08rem',
+      paddingBottom: '0.08rem',
+    }),
+    [],
+  )
 
   return (
     <div className="withings-trend">
       <div className="withings-trend-head">
         <p className="withings-metrics-title">{labels.title}</p>
         <div className="withings-trend-range" role="tablist" aria-label={labels.title}>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeRangeDays === 7}
-            className={`withings-range-button${activeRangeDays === 7 ? ' is-active' : ''}`}
-            onClick={() => setActiveRangeDays(7)}
-          >
-            {labels.range7}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeRangeDays === 30}
-            className={`withings-range-button${activeRangeDays === 30 ? ' is-active' : ''}`}
-            onClick={() => setActiveRangeDays(30)}
-          >
-            {labels.range30}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeRangeDays === 90}
-            className={`withings-range-button${activeRangeDays === 90 ? ' is-active' : ''}`}
-            onClick={() => setActiveRangeDays(90)}
-          >
-            {labels.range90}
-          </button>
+          {RANGE_OPTIONS.map((rangeDays) => {
+            const rangeLabel =
+              rangeDays === 7 ? labels.range7
+              : rangeDays === 30 ? labels.range30
+              : labels.range90
+
+            return (
+              <button
+                key={rangeDays}
+                type="button"
+                role="tab"
+                aria-selected={activeRangeDays === rangeDays}
+                className={`withings-range-button${activeRangeDays === rangeDays ? ' is-active' : ''}`}
+                onClick={() => handleRangeChange(rangeDays)}
+              >
+                {rangeLabel}
+              </button>
+            )
+          })}
         </div>
       </div>
       {chartData.length < 2 ? (
         <p className="withings-empty-note">{labels.noData}</p>
       ) : (
         <div className="withings-trend-chart">
-          <ResponsiveContainer width="100%" height={248}>
+          <ResponsiveContainer width="100%" height={248} debounce={120}>
             <LineChart data={chartData} margin={{ top: 10, right: 10, left: 4, bottom: 4 }}>
               <CartesianGrid strokeDasharray="4 4" stroke="rgba(148,163,184,0.35)" />
               <XAxis
@@ -166,26 +207,9 @@ export function WithingsTrendChart({ points, locale, labels }: WithingsTrendChar
               <Tooltip
                 labelFormatter={(label) => tooltipLabelFormatter(Number(label))}
                 formatter={(value, name) => tooltipValueFormatter(value as number | string, String(name))}
-                contentStyle={{
-                  background: 'var(--withings-tooltip-bg)',
-                  color: 'var(--withings-tooltip-text)',
-                  border: 'none',
-                  borderRadius: '12px',
-                  boxShadow: 'var(--withings-tooltip-shadow)',
-                  padding: '0.52rem 0.62rem',
-                }}
-                labelStyle={{
-                  color: 'var(--withings-tooltip-text)',
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  marginBottom: '0.2rem',
-                }}
-                itemStyle={{
-                  color: 'var(--withings-tooltip-text)',
-                  fontSize: '0.74rem',
-                  paddingTop: '0.08rem',
-                  paddingBottom: '0.08rem',
-                }}
+                contentStyle={tooltipContentStyle}
+                labelStyle={tooltipLabelStyle}
+                itemStyle={tooltipItemStyle}
               />
               <Line
                 yAxisId="weight"
@@ -198,7 +222,7 @@ export function WithingsTrendChart({ points, locale, labels }: WithingsTrendChar
                 activeDot={{ r: 4 }}
                 label={renderWeightLabel}
                 connectNulls={false}
-                isAnimationActive
+                isAnimationActive="auto"
                 animationDuration={320}
                 animationEasing="ease-out"
               />
@@ -212,7 +236,7 @@ export function WithingsTrendChart({ points, locale, labels }: WithingsTrendChar
                 dot={false}
                 activeDot={{ r: 3 }}
                 connectNulls={false}
-                isAnimationActive
+                isAnimationActive="auto"
                 animationDuration={320}
                 animationEasing="ease-out"
               />
@@ -227,7 +251,7 @@ export function WithingsTrendChart({ points, locale, labels }: WithingsTrendChar
                 dot={false}
                 activeDot={{ r: 3 }}
                 connectNulls={false}
-                isAnimationActive
+                isAnimationActive="auto"
                 animationDuration={320}
                 animationEasing="ease-out"
               />
@@ -252,3 +276,5 @@ export function WithingsTrendChart({ points, locale, labels }: WithingsTrendChar
     </div>
   )
 }
+
+export const WithingsTrendChart = memo(WithingsTrendChartComponent)

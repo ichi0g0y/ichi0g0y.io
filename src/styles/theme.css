@@ -1,10 +1,13 @@
+html[data-theme='dark'],
 body[data-theme='dark'] {
-  background: #0b1220;
-  color: #e2e8f0;
+  --app-top-background: #111b2f;
+  --app-page-background: #0b1220;
+  --app-text-color: #e2e8f0;
+  color: var(--app-text-color);
 }
 
 body[data-theme='dark'] .page {
-  color: #e2e8f0;
+  color: var(--app-text-color);
 }
 
 body[data-theme='dark'] .title-area,
@@ -26,7 +29,12 @@ body[data-theme='dark'] .category-command-trigger,
 body[data-theme='dark'] .category-command-list,
 body[data-theme='dark'] .admin-switch-row,
 body[data-theme='dark'] .admin-button.ghost,
-body[data-theme='dark'] .app-toast {
+body[data-theme='dark'] .app-toast,
+body[data-theme='dark'] .twitter-template-meta-item,
+body[data-theme='dark'] .twitter-template-preview,
+body[data-theme='dark'] .twitter-template-chart-preview,
+body[data-theme='dark'] .twitter-template-placeholder-button,
+body[data-theme='dark'] .twitter-template-preview-refresh {
   background: #111b2f;
   border-color: #2b3953;
   color: #dbe6f7;
@@ -34,6 +42,7 @@ body[data-theme='dark'] .app-toast {
 
 body[data-theme='dark'] .mode-toggle-button,
 body[data-theme='dark'] .top-control-select,
+body[data-theme='dark'] .top-control-icon-button,
 body[data-theme='dark'] .back-to-picks {
   background: #111b2f;
   border-color: #2b3953;
@@ -42,6 +51,7 @@ body[data-theme='dark'] .back-to-picks {
 
 body[data-theme='dark'] .mode-toggle-button:hover,
 body[data-theme='dark'] .top-control-select:hover,
+body[data-theme='dark'] .top-control-icon-button:hover,
 body[data-theme='dark'] .back-to-picks:hover {
   background: #16243f;
   border-color: #435a80;
@@ -80,8 +90,17 @@ body[data-theme='dark'] .selected-image-summary,
 body[data-theme='dark'] .admin-label,
 body[data-theme='dark'] .admin-state,
 body[data-theme='dark'] .admin-message,
+body[data-theme='dark'] .twitter-template-note,
+body[data-theme='dark'] .twitter-template-meta-item span,
+body[data-theme='dark'] .twitter-template-section-title,
+body[data-theme='dark'] .twitter-template-chart-preview-empty,
 body[data-theme='dark'] .copyright {
   color: #9fb0c9;
+}
+
+body[data-theme='dark'] .twitter-template-meta-item strong,
+body[data-theme='dark'] .twitter-template-placeholder-button code {
+  color: #f8fafc;
 }
 
 body[data-theme='dark'] .twitch-side-link,
@@ -101,7 +120,8 @@ body[data-theme='dark'] .gear-filter-chip {
 body[data-theme='dark'] .gear-filter-chip:hover,
 body[data-theme='dark'] .admin-button.ghost:hover,
 body[data-theme='dark'] .auth-dialog-close:hover,
-body[data-theme='dark'] .image-candidate-none:hover {
+body[data-theme='dark'] .image-candidate-none:hover,
+body[data-theme='dark'] .twitter-template-preview-refresh:hover:not(:disabled) {
   background: #16243f;
 }
 

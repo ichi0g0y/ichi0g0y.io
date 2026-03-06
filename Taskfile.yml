@@ -5,6 +5,7 @@ tasks:
     desc: 依存関係をインストール
     cmds:
       - bun install
+      - node ./scripts/fix_esbuild_macos.mjs
 
   dev:
     desc: 開発サーバー（Web + Worker API）を同時起動
@@ -194,7 +195,7 @@ tasks:
     deps:
       - install
     cmds:
-      - bun run build
+      - npm run build
 
   lint:
     desc: ESLintを実行
@@ -220,16 +221,20 @@ tasks:
     cmds:
       - bash ./scripts/sync_workspace_env.sh pull
 
-  env:push:prod:remote:
-    desc: .prod.vars をCloudflareリモート環境へ反映（secret設定 + deploy）
+  prod:deploy:
+    desc: .prod.vars を使って production へ deploy（secret反映を含む）
+    aliases:
+      - env:push:prod:remote
     deps:
       - build
     cmds:
       - bash ./scripts/push_prod_env_to_remote.sh
 
-  env:push:remote:
-    desc: .dev.vars をCloudflare remote環境へ反映（workers.dev固定URL + deploy）
+  remote:deploy:
+    desc: .dev.vars をCloudflare remote環境へ反映して workers.dev へ deploy
+    aliases:
+      - env:push:remote
     deps:
-      - install
+      - build
     cmds:
       - bash ./scripts/push_remote_env_to_remote.sh

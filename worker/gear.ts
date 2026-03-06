@@ -6,9 +6,19 @@ import { fetchLinkPreview, resolveRequestedImageUrls, normalizeImageUrls } from 
 import type { LinkPreview } from './gear-preview'
 import { mapGearRow, normalizeImageFit, parseStoredImageUrls } from './gear-map'
 import type { GearRow } from './gear-map'
-import { backupImageUrls } from './image-store'
+import { backupImageUrls, normalizeManagedImageUrlsForResponse } from './image-store'
 
-export async function handleListGearItems(env: Env) {
+function mapGearRowForResponse(row: GearRow, env: Env, requestUrl: URL) {
+  const item = mapGearRow(row)
+  const imageUrls = normalizeManagedImageUrlsForResponse(env, requestUrl, item.imageUrls)
+  return {
+    ...item,
+    imageUrl: imageUrls[0] ?? null,
+    imageUrls,
+  }
+}
+
+export async function handleListGearItems(request: Request, env: Env) {
   await ensureGearItemsSchema(env)
   const rows = await env.DB.prepare(
     `
@@ -18,7 +28,8 @@ export async function handleListGearItems(env: Env) {
     `,
   ).all<GearRow>()
 
-  const items = (rows.results ?? []).map(mapGearRow)
+  const requestUrl = new URL(request.url)
+  const items = (rows.results ?? []).map((row) => mapGearRowForResponse(row, env, requestUrl))
   return jsonResponse({ ok: true, items })
 }
 
@@ -123,7 +134,7 @@ async function updateExistingGearItem(
     return errorResponse('カード更新に失敗しました', 500)
   }
 
-  return jsonResponse({ ok: true, item: mapGearRow(updated), preview })
+  return jsonResponse({ ok: true, item: mapGearRowForResponse(updated, env, new URL(preview.url)), preview })
 }
 
 async function insertNewGearItem(
@@ -177,7 +188,7 @@ async function insertNewGearItem(
     return errorResponse('カード作成に失敗しました', 500)
   }
 
-  return jsonResponse({ ok: true, item: mapGearRow(inserted), preview })
+  return jsonResponse({ ok: true, item: mapGearRowForResponse(inserted, env, new URL(preview.url)), preview })
 }
 
 export async function handleCreateGearFromUrl(request: Request, env: Env) {
@@ -372,7 +383,7 @@ export async function handleUpdateGearItem(request: Request, env: Env) {
     return errorResponse('カード更新に失敗しました', 500)
   }
 
-  return jsonResponse({ ok: true, item: mapGearRow(updated) })
+  return jsonResponse({ ok: true, item: mapGearRowForResponse(updated, env, new URL(request.url)) })
 }
 
 export async function handleRenameGearCategory(request: Request, env: Env) {

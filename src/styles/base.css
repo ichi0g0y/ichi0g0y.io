@@ -2,11 +2,22 @@
   box-sizing: border-box;
 }
 
+:root {
+  --app-top-background: #ffffff;
+  --app-page-background: #efefef;
+  --app-root-background: var(--app-top-background);
+  --app-text-color: #111111;
+}
+
+html,
+body {
+  background: var(--app-root-background);
+}
+
 body {
   margin: 0;
   min-width: 320px;
-  background: #efefef;
-  color: #111111;
+  color: var(--app-text-color);
   font-family: 'Prompt', 'Zen Maru Gothic', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
 }
 
@@ -17,4 +28,6 @@ body {
 .page {
   min-height: 100dvh;
   padding: 0 0 3rem;
+  background: var(--app-page-background);
+  color: var(--app-text-color);
 }
