@@ -25,6 +25,36 @@ function sortGearItemsList(items: GearItem[]) {
   })
 }
 
+function applySequentialSortOrder(items: GearItem[]) {
+  return items.map((item, index) => ({ ...item, sortOrder: (index + 1) * 10 }))
+}
+
+function applyUpdatedGearItemCategorySort(items: GearItem[], updatedItem: GearItem) {
+  const normalizedUpdatedItem = normalizeGearItem(updatedItem)
+  const currentItems = sortGearItemsList(items)
+  const existingItem = currentItems.find((item) => item.id === normalizedUpdatedItem.id) ?? null
+
+  if (!existingItem) {
+    return applySequentialSortOrder([...currentItems, normalizedUpdatedItem])
+  }
+
+  if (existingItem.category.trim() === normalizedUpdatedItem.category.trim()) {
+    return currentItems.map((item) => (item.id === normalizedUpdatedItem.id ? normalizedUpdatedItem : item))
+  }
+
+  const remainingItems = currentItems.filter((item) => item.id !== normalizedUpdatedItem.id)
+  let insertIndex = remainingItems.length
+  for (let index = 0; index < remainingItems.length; index += 1) {
+    if (remainingItems[index]?.category.trim() === normalizedUpdatedItem.category.trim()) {
+      insertIndex = index + 1
+    }
+  }
+
+  const nextItems = [...remainingItems]
+  nextItems.splice(insertIndex, 0, normalizedUpdatedItem)
+  return applySequentialSortOrder(nextItems)
+}
+
 async function parsePublicApiResponse(response: Response) {
   const data = await response.json().catch(() => null)
   if (!response.ok) {
@@ -117,15 +147,6 @@ export function useGear(deps: UseGearDeps) {
     }
     return map
   }, [gearItems])
-
-  const editCategoryDisplayOptions = useMemo(
-    () =>
-      categoryOptions.map((category) => ({
-        value: category,
-        label: activeLanguage === 'en' ? categoryEnByCategory.get(category) ?? category : category,
-      })),
-    [activeLanguage, categoryEnByCategory, categoryOptions],
-  )
 
   const categoryDisplayMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -787,6 +808,7 @@ export function useGear(deps: UseGearDeps) {
       setIsUpdating(true)
 
       try {
+        const previousItems = gearItems
         const updatePayload: {
           title: string
           description: string
@@ -820,28 +842,38 @@ export function useGear(deps: UseGearDeps) {
         if (!updatedItem) {
           throw new Error('カード更新に失敗しました')
         }
-        setGearItems((previous) =>
-          sortGearItemsList(
-            previous.map((entry) => (entry.id === updatedItem.id ? normalizeGearItem({ ...entry, ...updatedItem }) : entry)),
-          ),
+        const mergedUpdatedItem = normalizeGearItem({
+          ...(previousItems.find((entry) => entry.id === updatedItem.id) ?? updatedItem),
+          ...updatedItem,
+        })
+        const fallbackItems = sortGearItemsList(
+          previousItems.map((entry) => (entry.id === mergedUpdatedItem.id ? mergedUpdatedItem : entry)),
         )
-        setEditingGearId(null)
-        setEditTitle('')
-        setEditTitleEn('')
-        setEditOriginalTitleEn('')
-        setEditDescription('')
-        setEditDescriptionEn('')
-        setEditOriginalDescriptionEn('')
-        setEditCategory('')
-        setEditImageUrls([])
-        setEditImageUrlInput('')
-        setEditDraggingImageIndex(null)
-        setEditDragOverImageIndex(null)
-        setEditPreviewUrl('')
-        setEditImageCandidates([])
-        setIsFetchingEditPreview(false)
-        setIsTranslatingEditDescriptionEn(false)
-        setEditImageFit('contain')
+        const nextItems = applyUpdatedGearItemCategorySort(previousItems, mergedUpdatedItem)
+        const previousOrderedIds = previousItems.map((item) => item.id)
+        const nextOrderedIds = nextItems.map((item) => item.id)
+        const shouldPersistReorder =
+          previousOrderedIds.length === nextOrderedIds.length &&
+          previousOrderedIds.some((id, index) => id !== nextOrderedIds[index])
+
+        if (shouldPersistReorder) {
+          try {
+            await requestWithAuth('/api/admin/gear-items/reorder', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ orderedIds: nextOrderedIds }),
+            })
+          } catch (error) {
+            setGearItems(fallbackItems)
+            handleCancelEdit()
+            const message = error instanceof Error ? error.message : '並び順の保存に失敗しました'
+            showToast(`カードは更新しましたが、${message}`, 'error')
+            return
+          }
+        }
+
+        setGearItems(nextItems)
+        handleCancelEdit()
         showToast('カードを更新しました。', 'success')
       } catch (error) {
         const message = error instanceof Error ? error.message : 'カード更新に失敗しました'
@@ -863,6 +895,8 @@ export function useGear(deps: UseGearDeps) {
       editingGearId,
       categoryEnByCategory,
       requestWithAuth,
+      gearItems,
+      handleCancelEdit,
       showToast,
     ],
   )
@@ -1304,7 +1338,6 @@ export function useGear(deps: UseGearDeps) {
     isModeToggleLocked,
     categoryOptions,
     categoryEnByCategory,
-    editCategoryDisplayOptions,
     categoryDisplayMap,
     filteredGearItems,
     visibleFilteredGearItems,

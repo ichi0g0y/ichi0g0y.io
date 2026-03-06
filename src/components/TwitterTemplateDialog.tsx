@@ -25,7 +25,9 @@ export type TwitterTemplateDialogProps = {
   chartPreviewRefreshLabel: string
   saveLabel: string
   connectLabel: string
+  publishLabel: string
   testLabel: string
+  isPublishing: boolean
   isTesting: boolean
   accountLabel: string
   accountValue: string
@@ -38,6 +40,7 @@ export type TwitterTemplateDialogProps = {
   onClose: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onConnect: () => void
+  onPublishLatest: () => void
   onTestPost: () => void
   onSetAutoPostEnabled: (nextEnabled: boolean) => void
   onSetTemplate: (value: string) => void
@@ -61,7 +64,9 @@ export function TwitterTemplateDialog({
   chartPreviewRefreshLabel,
   saveLabel,
   connectLabel,
+  publishLabel,
   testLabel,
+  isPublishing,
   isTesting,
   accountLabel,
   accountValue,
@@ -74,6 +79,7 @@ export function TwitterTemplateDialog({
   onClose,
   onSubmit,
   onConnect,
+  onPublishLatest,
   onTestPost,
   onSetAutoPostEnabled,
   onSetTemplate,
@@ -95,7 +101,7 @@ export function TwitterTemplateDialog({
       >
         <div className="auth-dialog-header">
           <p className="auth-dialog-title">{title}</p>
-          <button className="auth-dialog-close" type="button" onClick={onClose} disabled={isSaving} aria-label="閉じる">
+          <button className="auth-dialog-close" type="button" onClick={onClose} disabled={isSaving || isPublishing || isTesting} aria-label="閉じる">
             <Cross2Icon />
           </button>
         </div>
@@ -106,7 +112,10 @@ export function TwitterTemplateDialog({
             <button className="admin-button ghost" type="button" onClick={onConnect} disabled={isSaving || isConnecting}>
               {connectLabel}
             </button>
-            <button className="admin-button ghost" type="button" onClick={onTestPost} disabled={isSaving || isTesting}>
+            <button className="admin-button ghost" type="button" onClick={onPublishLatest} disabled={isSaving || isPublishing || isTesting}>
+              {publishLabel}
+            </button>
+            <button className="admin-button ghost" type="button" onClick={onTestPost} disabled={isSaving || isPublishing || isTesting}>
               {testLabel}
             </button>
           </div>

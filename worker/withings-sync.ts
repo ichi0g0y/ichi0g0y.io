@@ -1,5 +1,6 @@
 import type { Env } from './types'
 import { nowSeconds, sha256Hex } from './utils'
+import type { WithingsMeasurementForTweet } from './twitter-types'
 import type {
   WithingsActivityBody,
   WithingsAnswersBody,
@@ -578,18 +579,19 @@ async function syncMeasureGroupsByCategory(
   let offset = 0
   let loop = 0
   let heightM = resolveHeightM(connection, env)
+  let latestNewWeightMeasurement: WithingsMeasurementForTweet | null = null
 
   while (loop < WITHINGS_PAGINATION_MAX_LOOP) {
     loop += 1
     if (!activeConnection) {
-      return { ok: false, connection: null as WithingsConnection | null }
+      return { ok: false, connection: null as WithingsConnection | null, latestNewWeightMeasurement }
     }
     const result = await fetchMeasureGroups(env, activeConnection, startDate, endDate, category, offset)
     if (!result.connection) {
-      return { ok: false, connection: null as WithingsConnection | null }
+      return { ok: false, connection: null as WithingsConnection | null, latestNewWeightMeasurement }
     }
     if (!result.payload || result.payload.status !== 0) {
-      return { ok: false, connection: result.connection }
+      return { ok: false, connection: result.connection, latestNewWeightMeasurement }
     }
     activeConnection = result.connection
 
@@ -630,6 +632,19 @@ async function syncMeasureGroupsByCategory(
       }
 
       const bmi = calculateBmi(weightKg, heightM)
+      const existingMeasurement = persistSummary
+        ? await env.DB.prepare(
+            `
+              SELECT measured_at, weight_kg
+              FROM withings_measurements
+              WHERE userid = ?1
+                AND grpid = ?2
+              LIMIT 1
+            `,
+          )
+            .bind(result.connection.userId, groupId)
+            .first<{ measured_at: number; weight_kg: number | null }>()
+        : null
 
       await env.DB.prepare(
         `
@@ -655,17 +670,38 @@ async function syncMeasureGroupsByCategory(
           now,
         )
         .run()
+
+      const isNewWeightMeasurement =
+        weightKg !== null &&
+        (!existingMeasurement ||
+          existingMeasurement.weight_kg === null ||
+          existingMeasurement.weight_kg !== weightKg ||
+          existingMeasurement.measured_at !== measuredAt)
+      if (
+        isNewWeightMeasurement &&
+        (!latestNewWeightMeasurement ||
+          measuredAt > latestNewWeightMeasurement.measuredAt ||
+          (measuredAt === latestNewWeightMeasurement.measuredAt && groupId > latestNewWeightMeasurement.grpid))
+      ) {
+        latestNewWeightMeasurement = {
+          grpid: groupId,
+          measuredAt,
+          weightKg,
+          fatRatio,
+          bmi,
+        }
+      }
     }
 
     const hasMore = Boolean(result.payload.body?.more)
     if (!hasMore) {
-      return { ok: true, connection: activeConnection }
+      return { ok: true, connection: activeConnection, latestNewWeightMeasurement }
     }
 
     offset = resolveNextOffset(offset, result.payload.body?.offset, groups.length)
   }
 
-  return { ok: false, connection: activeConnection }
+  return { ok: false, connection: activeConnection, latestNewWeightMeasurement }
 }
 
 async function syncActivityData(
@@ -1086,10 +1122,11 @@ export async function syncMeasurements(
   const fallbackStart = resolveIncrementalSyncStart(connection.lastSyncedAt, preResolvedEnd)
   const window = resolveSyncWindow(startDate, endDate, fallbackStart)
   let activeConnection: WithingsConnection | null = connection
+  let latestNewWeightMeasurement: WithingsMeasurementForTweet | null = null
 
   for (const category of WITHINGS_MEASURE_BASE_CATEGORIES) {
     if (!activeConnection) {
-      return false
+      return { ok: false, latestNewWeightMeasurement }
     }
     const synced = await syncMeasureGroupsByCategory(
       env,
@@ -1100,11 +1137,20 @@ export async function syncMeasurements(
       category === 1,
     )
     if (!synced.connection) {
-      return false
+      return { ok: false, latestNewWeightMeasurement }
     }
     activeConnection = synced.connection
     if (!synced.ok) {
-      return false
+      return { ok: false, latestNewWeightMeasurement }
+    }
+    if (
+      synced.latestNewWeightMeasurement &&
+      (!latestNewWeightMeasurement ||
+        synced.latestNewWeightMeasurement.measuredAt > latestNewWeightMeasurement.measuredAt ||
+        (synced.latestNewWeightMeasurement.measuredAt === latestNewWeightMeasurement.measuredAt &&
+          synced.latestNewWeightMeasurement.grpid > latestNewWeightMeasurement.grpid))
+    ) {
+      latestNewWeightMeasurement = synced.latestNewWeightMeasurement
     }
   }
 
@@ -1114,11 +1160,11 @@ export async function syncMeasurements(
 
   for (const syncFn of optionalSyncFunctions) {
     if (!activeConnection) {
-      return false
+      return { ok: false, latestNewWeightMeasurement }
     }
     const synced = await syncFn(env, activeConnection, window.startDate, window.endDate)
     if (!synced.connection) {
-      return false
+      return { ok: false, latestNewWeightMeasurement }
     }
     activeConnection = synced.connection
   }
@@ -1135,5 +1181,5 @@ export async function syncMeasurements(
   }
 
   await markConnectionSyncedAt(env, nowSeconds())
-  return true
+  return { ok: true, latestNewWeightMeasurement }
 }

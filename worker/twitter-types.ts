@@ -111,6 +111,7 @@ export type WithingsMeasurementForTweet = {
 export type CreateTwitterPostOptions = {
   template: string
   withingsUserId?: string | null
+  targetGroupId?: number | null
   minMeasuredAt?: number | null
   maxMeasuredAt?: number | null
   ignoreAlreadyPosted?: boolean
