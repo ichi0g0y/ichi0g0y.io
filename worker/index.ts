@@ -103,7 +103,7 @@ async function routeApi(request: Request, env: Env, ctx?: ExecutionContext) {
   }
 
   if (method === 'GET' && pathname === '/api/gear-items') {
-    return handleListGearItems(env)
+    return handleListGearItems(request, env)
   }
 
   if (method === 'POST' && pathname === '/api/admin/gear-items/from-url') {

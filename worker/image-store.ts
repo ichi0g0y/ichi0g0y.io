@@ -122,6 +122,18 @@ function buildManagedImageUrl(env: Env, imageId: string, requestUrl: URL) {
   return `${baseUrl}/${imageId}`
 }
 
+export function normalizeManagedImageUrlForResponse(env: Env, requestUrl: URL, value: string) {
+  const imageId = resolveManagedImageIdFromAnyUrl(value, requestUrl, env)
+  if (!imageId) {
+    return value
+  }
+  return buildManagedImageUrl(env, imageId, requestUrl)
+}
+
+export function normalizeManagedImageUrlsForResponse(env: Env, requestUrl: URL, values: string[]) {
+  return normalizeImageUrls(values.map((value) => normalizeManagedImageUrlForResponse(env, requestUrl, value)))
+}
+
 function resolveManagedImageIdFromAnyUrl(value: string, requestUrl: URL, env: Env) {
   const directManagedPathId = resolveManagedImageId(value)
   if (directManagedPathId) {

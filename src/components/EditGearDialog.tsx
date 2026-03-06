@@ -1,5 +1,5 @@
 import { Cross2Icon } from '@radix-ui/react-icons'
-import type { DragEvent, FormEvent, SyntheticEvent } from 'react'
+import { useRef, type DragEvent, type FormEvent, type SyntheticEvent } from 'react'
 
 import type { GearItem, ImageSize } from '../types'
 import { ImageFitSwitch } from './ImageFitSwitch'
@@ -90,9 +90,24 @@ export function EditGearDialog({
   onPreviewImageLoad,
   getImageSizeLabel,
 }: EditGearDialogProps) {
+  const dialogRef = useRef<HTMLElement | null>(null)
+
+  const preserveScrollPosition = (callback: () => void) => {
+    const dialog = dialogRef.current
+    const scrollTop = dialog?.scrollTop ?? 0
+    callback()
+    if (!dialog) {
+      return
+    }
+    requestAnimationFrame(() => {
+      dialog.scrollTop = scrollTop
+    })
+  }
+
   return (
     <div className="auth-dialog-backdrop" role="presentation" onClick={onClose}>
       <section
+        ref={dialogRef}
         className="auth-dialog gear-edit-dialog"
         role="dialog"
         aria-modal="true"
@@ -290,7 +305,8 @@ export function EditGearDialog({
                       <button
                         className="admin-button danger"
                         type="button"
-                        onClick={() => onRemoveEditImage(index)}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => preserveScrollPosition(() => onRemoveEditImage(index))}
                         disabled={isUpdating}
                       >
                         削除
