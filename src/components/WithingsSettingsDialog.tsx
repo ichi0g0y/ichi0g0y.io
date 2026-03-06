@@ -4,10 +4,12 @@ type WithingsSettingsDialogProps = {
   isOpen: boolean
   isConnecting: boolean
   isSyncing: boolean
+  isTestingNotify: boolean
   title: string
   description: string
   connectLabel: string
   syncLabel: string
+  notifyTestLabel: string
   statusLabel: string
   statusValue: string
   userLabel: string
@@ -17,6 +19,7 @@ type WithingsSettingsDialogProps = {
   onClose: () => void
   onConnect: () => void
   onSync: () => void
+  onTestNotify: () => void
   canSync: boolean
 }
 
@@ -24,10 +27,12 @@ export function WithingsSettingsDialog({
   isOpen,
   isConnecting,
   isSyncing,
+  isTestingNotify,
   title,
   description,
   connectLabel,
   syncLabel,
+  notifyTestLabel,
   statusLabel,
   statusValue,
   userLabel,
@@ -37,6 +42,7 @@ export function WithingsSettingsDialog({
   onClose,
   onConnect,
   onSync,
+  onTestNotify,
   canSync,
 }: WithingsSettingsDialogProps) {
   if (!isOpen) {
@@ -48,7 +54,13 @@ export function WithingsSettingsDialog({
       <section className="auth-dialog" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
         <div className="auth-dialog-header">
           <p className="auth-dialog-title">{title}</p>
-          <button className="auth-dialog-close" type="button" onClick={onClose} disabled={isConnecting || isSyncing} aria-label="閉じる">
+          <button
+            className="auth-dialog-close"
+            type="button"
+            onClick={onClose}
+            disabled={isConnecting || isSyncing || isTestingNotify}
+            aria-label="閉じる"
+          >
             <Cross2Icon />
           </button>
         </div>
@@ -70,11 +82,24 @@ export function WithingsSettingsDialog({
             </p>
           </div>
           <div className="auth-step-actions twitter-template-actions">
-            <button className="admin-button ghost" type="button" onClick={onConnect} disabled={isConnecting || isSyncing}>
+            <button className="admin-button ghost" type="button" onClick={onConnect} disabled={isConnecting || isSyncing || isTestingNotify}>
               {connectLabel}
             </button>
-            <button className="admin-button ghost" type="button" onClick={onSync} disabled={!canSync || isConnecting || isSyncing}>
+            <button
+              className="admin-button ghost"
+              type="button"
+              onClick={onSync}
+              disabled={!canSync || isConnecting || isSyncing || isTestingNotify}
+            >
               {syncLabel}
+            </button>
+            <button
+              className="admin-button ghost"
+              type="button"
+              onClick={onTestNotify}
+              disabled={!canSync || isConnecting || isSyncing || isTestingNotify}
+            >
+              {notifyTestLabel}
             </button>
           </div>
         </div>

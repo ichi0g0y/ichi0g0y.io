@@ -2,6 +2,7 @@ import { Cross2Icon } from '@radix-ui/react-icons'
 import { useRef, type DragEvent, type FormEvent, type SyntheticEvent } from 'react'
 
 import type { GearItem, ImageSize } from '../types'
+import { CategoryCommandField } from './CategoryCommandField'
 import { ImageFitSwitch } from './ImageFitSwitch'
 
 export type EditGearDialogProps = {
@@ -11,7 +12,7 @@ export type EditGearDialogProps = {
   editDescriptionEn: string
   editCategory: string
   editCategoryLabel: string
-  categoryDisplayOptions: Array<{ value: string; label: string }>
+  categoryOptions: string[]
   editImageUrls: string[]
   editImageUrlInput: string
   editImageCandidates: string[]
@@ -55,7 +56,7 @@ export function EditGearDialog({
   editDescriptionEn,
   editCategory,
   editCategoryLabel,
-  categoryDisplayOptions,
+  categoryOptions,
   editImageUrls,
   editImageUrlInput,
   editImageCandidates,
@@ -179,18 +180,12 @@ export function EditGearDialog({
           </label>
           <label className="admin-label">
             カテゴリ
-            <select
-              className="admin-select"
+            <CategoryCommandField
               value={editCategory}
-              onChange={(event) => onSetEditCategory(event.target.value)}
-              aria-label="カテゴリ選択"
-            >
-              {categoryDisplayOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              options={categoryOptions}
+              onValueChange={onSetEditCategory}
+              placeholder="カテゴリを入力（候補から選択可）"
+            />
           </label>
           <p className="add-dialog-note">選択中: {editCategoryLabel}</p>
           <label className="admin-label">

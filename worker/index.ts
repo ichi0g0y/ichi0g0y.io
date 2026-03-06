@@ -11,6 +11,7 @@ import {
 } from './gear'
 import { handleGetImageById } from './image-store'
 import {
+  handleTwitterLatestPost,
   handleTwitterOAuthCallback,
   handleTwitterOAuthStart,
   handleTwitterSettingsUpdate,
@@ -24,6 +25,7 @@ import {
   handleWithingsAuthCallback,
   handleWithingsAuthStart,
   handleWithingsNotify,
+  handleWithingsNotifySimulation,
   handleWithingsStatus,
   handleWithingsSync,
 } from './withings'
@@ -186,12 +188,28 @@ async function routeApi(request: Request, env: Env, ctx?: ExecutionContext) {
     return handleTwitterTestPost(request, env)
   }
 
+  if (method === 'POST' && pathname === '/api/admin/twitter/post-latest') {
+    const auth = await requireAuth(request, env)
+    if (!auth) {
+      return errorResponse('認証が必要です', 401)
+    }
+    return handleTwitterLatestPost(request, env)
+  }
+
   if (method === 'POST' && pathname === '/api/admin/withings/sync') {
     const auth = await requireAuth(request, env)
     if (!auth) {
       return errorResponse('認証が必要です', 401)
     }
     return handleWithingsSync(env, request)
+  }
+
+  if (method === 'POST' && pathname === '/api/admin/withings/notify-test') {
+    const auth = await requireAuth(request, env)
+    if (!auth) {
+      return errorResponse('認証が必要です', 401)
+    }
+    return handleWithingsNotifySimulation(request, env)
   }
 
   return errorResponse('APIが見つかりません', 404)
