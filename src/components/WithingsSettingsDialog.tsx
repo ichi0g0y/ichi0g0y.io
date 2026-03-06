@@ -5,11 +5,15 @@ type WithingsSettingsDialogProps = {
   isConnecting: boolean
   isSyncing: boolean
   isTestingNotify: boolean
+  isSubscribingWebhook: boolean
+  isUnsubscribingWebhook: boolean
   title: string
   description: string
   connectLabel: string
   syncLabel: string
   notifyTestLabel: string
+  subscribeWebhookLabel: string
+  unsubscribeWebhookLabel: string
   statusLabel: string
   statusValue: string
   userLabel: string
@@ -20,7 +24,11 @@ type WithingsSettingsDialogProps = {
   onConnect: () => void
   onSync: () => void
   onTestNotify: () => void
+  onSubscribeWebhook: () => void
+  onUnsubscribeWebhook: () => void
   canSync: boolean
+  canManageWebhook: boolean
+  canUnsubscribeWebhook: boolean
 }
 
 export function WithingsSettingsDialog({
@@ -28,11 +36,15 @@ export function WithingsSettingsDialog({
   isConnecting,
   isSyncing,
   isTestingNotify,
+  isSubscribingWebhook,
+  isUnsubscribingWebhook,
   title,
   description,
   connectLabel,
   syncLabel,
   notifyTestLabel,
+  subscribeWebhookLabel,
+  unsubscribeWebhookLabel,
   statusLabel,
   statusValue,
   userLabel,
@@ -43,11 +55,17 @@ export function WithingsSettingsDialog({
   onConnect,
   onSync,
   onTestNotify,
+  onSubscribeWebhook,
+  onUnsubscribeWebhook,
   canSync,
+  canManageWebhook,
+  canUnsubscribeWebhook,
 }: WithingsSettingsDialogProps) {
   if (!isOpen) {
     return null
   }
+
+  const isBusy = isConnecting || isSyncing || isTestingNotify || isSubscribingWebhook || isUnsubscribingWebhook
 
   return (
     <div className="auth-dialog-backdrop" role="presentation" onClick={onClose}>
@@ -58,7 +76,7 @@ export function WithingsSettingsDialog({
             className="auth-dialog-close"
             type="button"
             onClick={onClose}
-            disabled={isConnecting || isSyncing || isTestingNotify}
+            disabled={isBusy}
             aria-label="閉じる"
           >
             <Cross2Icon />
@@ -82,23 +100,24 @@ export function WithingsSettingsDialog({
             </p>
           </div>
           <div className="auth-step-actions twitter-template-actions">
-            <button className="admin-button ghost" type="button" onClick={onConnect} disabled={isConnecting || isSyncing || isTestingNotify}>
+            <button className="admin-button ghost" type="button" onClick={onConnect} disabled={isBusy}>
               {connectLabel}
             </button>
-            <button
-              className="admin-button ghost"
-              type="button"
-              onClick={onSync}
-              disabled={!canSync || isConnecting || isSyncing || isTestingNotify}
-            >
+            <button className="admin-button ghost" type="button" onClick={onSync} disabled={!canSync || isBusy}>
               {syncLabel}
+            </button>
+            <button className="admin-button ghost" type="button" onClick={onSubscribeWebhook} disabled={!canManageWebhook || isBusy}>
+              {subscribeWebhookLabel}
             </button>
             <button
               className="admin-button ghost"
               type="button"
-              onClick={onTestNotify}
-              disabled={!canSync || isConnecting || isSyncing || isTestingNotify}
+              onClick={onUnsubscribeWebhook}
+              disabled={!canUnsubscribeWebhook || isBusy}
             >
+              {unsubscribeWebhookLabel}
+            </button>
+            <button className="admin-button ghost" type="button" onClick={onTestNotify} disabled={!canSync || isBusy}>
               {notifyTestLabel}
             </button>
           </div>

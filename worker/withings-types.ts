@@ -10,7 +10,8 @@ export const WITHINGS_HEART_V2_URL = 'https://wbsapi.withings.net/v2/heart'
 export const WITHINGS_ANSWERS_V2_URL = 'https://wbsapi.withings.net/v2/answers'
 export const DEFAULT_WITHINGS_OAUTH_SCOPE = 'user.metrics,user.activity,user.sleepevents'
 export const WITHINGS_NOTIFY_APPLI_MEASURE = 1
-export const WITHINGS_NOTIFY_APPLIS = [1, 2, 4, 16, 44, 46, 50, 51, 52, 54, 55, 58, 60, 61, 62]
+export const WITHINGS_NOTIFY_APPLI_ACTIVITY = 16
+export const WITHINGS_NOTIFY_APPLIS = [WITHINGS_NOTIFY_APPLI_MEASURE, WITHINGS_NOTIFY_APPLI_ACTIVITY]
 export const WITHINGS_MEASURE_BASE_CATEGORIES = [1]
 export const WITHINGS_RETENTION_DAYS = 90
 export const WITHINGS_RETENTION_WINDOW_SEC = WITHINGS_RETENTION_DAYS * 24 * 60 * 60
@@ -119,6 +120,7 @@ export type WithingsNotificationPayload = {
   appli: number | null
   startDate: number | null
   endDate: number | null
+  dateYmd: string | null
   raw: Record<string, string>
 }
 
@@ -129,6 +131,15 @@ export type WithingsNotifySubscribeResult = {
   error: string | null
   usedFallback: boolean
   subscribedApplis: number[]
+  failedApplis: number[]
+}
+
+export type WithingsNotifyUnsubscribeResult = {
+  ok: boolean
+  callbackUrls: string[]
+  status: number | null
+  error: string | null
+  unsubscribedApplis: number[]
   failedApplis: number[]
 }
 
