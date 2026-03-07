@@ -16,7 +16,7 @@ export const WITHINGS_MEASURE_BASE_CATEGORIES = [1]
 export const WITHINGS_RETENTION_DAYS = 90
 export const WITHINGS_RETENTION_WINDOW_SEC = WITHINGS_RETENTION_DAYS * 24 * 60 * 60
 export const WITHINGS_SYNC_OVERLAP_SEC = 2 * 24 * 60 * 60
-export const WITHINGS_RECENT_WORKOUT_LIMIT = 1
+export const WITHINGS_RECENT_WORKOUT_LIMIT = 3
 export const WITHINGS_PAGINATION_MAX_LOOP = 1000
 export const WITHINGS_INTRADAY_DATA_FIELDS =
   'steps,elevation,soft,moderate,intense,calories,distance,active,hr,spo2,rr,strokes,pool_laps,duration'

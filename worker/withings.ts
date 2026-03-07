@@ -25,6 +25,7 @@ import {
   redirectToApp,
   resolveHeightM,
   resolveWithingsRetentionStart,
+  toDateYmd,
   toFiniteInteger,
   toFiniteNumber,
   validateWithingsOAuthConfig,
@@ -161,6 +162,7 @@ type WithingsNotifyProcessResult = {
   tweetResult: PostLatestWithingsMeasurementTweetResult | null
   skipReason:
     | 'connection_not_found'
+    | 'connection_unavailable'
     | 'payload_user_mismatch'
     | 'sync_failed'
     | 'non_measure_notify'
@@ -196,6 +198,36 @@ function buildNotifyResult(
     subscriptionRepair: DEFAULT_SUBSCRIPTION_REPAIR,
     ...overrides,
   }
+}
+
+async function resolveReadyWithingsConnection(env: Env) {
+  const storedConnection = await getStoredConnection(env)
+  if (!storedConnection) {
+    return {
+      status: 'missing' as const,
+      storedConnection: null,
+      connection: null,
+    }
+  }
+
+  const connection = await ensureConnectionReady(env)
+  if (!connection) {
+    return {
+      status: 'unavailable' as const,
+      storedConnection,
+      connection: null,
+    }
+  }
+
+  return {
+    status: 'ready' as const,
+    storedConnection,
+    connection,
+  }
+}
+
+function buildWithingsConnectionUnavailableMessage() {
+  return 'Withings連携情報は保存されていますが、現在利用できません。再連携または設定確認を行ってください。'
 }
 
 function normalizeNotifyCallbackPath(rawUrl: string) {
@@ -268,10 +300,13 @@ async function processWithingsNotify(
     repairSubscription?: boolean
   },
 ): Promise<WithingsNotifyProcessResult> {
-  const connection = await ensureConnectionReady(env)
-  if (!connection) {
-    return buildNotifyResult(options.authMode, { skipReason: 'connection_not_found' })
+  const connectionState = await resolveReadyWithingsConnection(env)
+  if (!connectionState.connection) {
+    return buildNotifyResult(options.authMode, {
+      skipReason: connectionState.status === 'missing' ? 'connection_not_found' : 'connection_unavailable',
+    })
   }
+  const connection = connectionState.connection
 
   if (payload.userId && payload.userId !== connection.userId) {
     return buildNotifyResult(options.authMode, {
@@ -351,6 +386,9 @@ async function processWithingsNotify(
 function buildSimulatedNotifyMessage(result: WithingsNotifyProcessResult) {
   if (result.skipReason === 'connection_not_found') {
     return 'Withings連携が未設定です。'
+  }
+  if (result.skipReason === 'connection_unavailable') {
+    return buildWithingsConnectionUnavailableMessage()
   }
   if (result.skipReason === 'sync_failed') {
     return '擬似Notifyの同期に失敗しました。'
@@ -829,6 +867,16 @@ export async function handleWithingsNotify(request: Request, env: Env, ctx?: Exe
       }
       if (result.skipReason === 'connection_not_found') {
         await notifyWithingsError(env, 'notify_connection_not_found', 'Withings連携が未設定のため通知処理を継続できませんでした。')
+      } else if (result.skipReason === 'connection_unavailable') {
+        await notifyWithingsError(
+          env,
+          'notify_connection_unavailable',
+          'Withings連携情報は保存されていますが、現在利用できないため通知処理を継続できませんでした。',
+          [
+            `userId: ${storedConnection?.userId ?? '(unknown)'}`,
+            `accessExpiresAt: ${formatDiscordTimestamp(storedConnection?.accessExpiresAt) ?? '(unknown)'}`,
+          ],
+        )
       } else if (result.skipReason === 'payload_user_mismatch') {
         await notifyWithingsError(env, 'notify_payload_user_mismatch', 'Withings通知のユーザーIDが保存済みユーザーと一致しません。')
       } else if (result.skipReason === 'sync_failed') {
@@ -867,10 +915,13 @@ export async function handleWithingsSync(env: Env, request?: Request) {
     return errorResponse(configError, 500)
   }
 
-  const connection = await ensureConnectionReady(env)
-  if (!connection) {
-    return errorResponse('Withings連携が未設定です', 400)
+  const connectionState = await resolveReadyWithingsConnection(env)
+  if (!connectionState.connection) {
+    return connectionState.status === 'missing'
+      ? errorResponse('Withings連携が未設定です', 400)
+      : errorResponse(buildWithingsConnectionUnavailableMessage(), 502)
   }
+  const connection = connectionState.connection
 
   let startDate: number | null = null
   let endDate: number | null = null
@@ -917,10 +968,13 @@ export async function handleWithingsSync(env: Env, request?: Request) {
 }
 
 export async function handleWithingsNotifySubscribe(request: Request, env: Env) {
-  const connection = await ensureConnectionReady(env)
-  if (!connection) {
-    return errorResponse('Withings連携が未設定です', 400)
+  const connectionState = await resolveReadyWithingsConnection(env)
+  if (!connectionState.connection) {
+    return connectionState.status === 'missing'
+      ? errorResponse('Withings連携が未設定です', 400)
+      : errorResponse(buildWithingsConnectionUnavailableMessage(), 502)
   }
+  const connection = connectionState.connection
 
   const notifyResult = await subscribeNotify(request, env, connection)
   if (!notifyResult.ok) {
@@ -981,10 +1035,13 @@ export async function handleWithingsNotifySubscribe(request: Request, env: Env) 
 }
 
 export async function handleWithingsNotifyUnsubscribe(request: Request, env: Env) {
-  const connection = await ensureConnectionReady(env)
-  if (!connection) {
-    return errorResponse('Withings連携が未設定です', 400)
+  const connectionState = await resolveReadyWithingsConnection(env)
+  if (!connectionState.connection) {
+    return connectionState.status === 'missing'
+      ? errorResponse('Withings連携が未設定です', 400)
+      : errorResponse(buildWithingsConnectionUnavailableMessage(), 502)
   }
+  const connection = connectionState.connection
 
   const notifyResult = await unsubscribeNotify(request, env, connection)
   if (!notifyResult.ok) {
@@ -1042,14 +1099,20 @@ export async function handleWithingsNotifySimulation(request: Request, env: Env)
     return errorResponse('Withings連携が未設定です', 400)
   }
 
+  const url = new URL(request.url)
+  const requestedAppli = url.searchParams.get('appli')?.trim() || ''
+  const appli = requestedAppli === 'activity' ? WITHINGS_NOTIFY_APPLI_ACTIVITY : WITHINGS_NOTIFY_APPLI_MEASURE
+  const activityDateYmd = appli === WITHINGS_NOTIFY_APPLI_ACTIVITY ? toDateYmd(nowSeconds()) : null
   const payload = {
     userId: connection.userId,
-    appli: WITHINGS_NOTIFY_APPLI_MEASURE,
+    appli,
     startDate: null,
     endDate: null,
+    dateYmd: activityDateYmd,
     raw: {
       userid: connection.userId,
-      appli: String(WITHINGS_NOTIFY_APPLI_MEASURE),
+      appli: String(appli),
+      ...(activityDateYmd ? { date: activityDateYmd } : {}),
       simulated: '1',
     },
   } satisfies WithingsNotificationPayload
