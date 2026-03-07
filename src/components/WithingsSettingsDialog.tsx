@@ -5,6 +5,7 @@ type WithingsSettingsDialogProps = {
   isConnecting: boolean
   isSyncing: boolean
   isTestingNotify: boolean
+  isTestingWorkoutNotify: boolean
   isSubscribingWebhook: boolean
   isUnsubscribingWebhook: boolean
   title: string
@@ -12,6 +13,7 @@ type WithingsSettingsDialogProps = {
   connectLabel: string
   syncLabel: string
   notifyTestLabel: string
+  workoutNotifyTestLabel: string
   subscribeWebhookLabel: string
   unsubscribeWebhookLabel: string
   statusLabel: string
@@ -24,6 +26,7 @@ type WithingsSettingsDialogProps = {
   onConnect: () => void
   onSync: () => void
   onTestNotify: () => void
+  onTestWorkoutNotify: () => void
   onSubscribeWebhook: () => void
   onUnsubscribeWebhook: () => void
   canSync: boolean
@@ -36,6 +39,7 @@ export function WithingsSettingsDialog({
   isConnecting,
   isSyncing,
   isTestingNotify,
+  isTestingWorkoutNotify,
   isSubscribingWebhook,
   isUnsubscribingWebhook,
   title,
@@ -43,6 +47,7 @@ export function WithingsSettingsDialog({
   connectLabel,
   syncLabel,
   notifyTestLabel,
+  workoutNotifyTestLabel,
   subscribeWebhookLabel,
   unsubscribeWebhookLabel,
   statusLabel,
@@ -55,6 +60,7 @@ export function WithingsSettingsDialog({
   onConnect,
   onSync,
   onTestNotify,
+  onTestWorkoutNotify,
   onSubscribeWebhook,
   onUnsubscribeWebhook,
   canSync,
@@ -65,7 +71,8 @@ export function WithingsSettingsDialog({
     return null
   }
 
-  const isBusy = isConnecting || isSyncing || isTestingNotify || isSubscribingWebhook || isUnsubscribingWebhook
+  const isBusy =
+    isConnecting || isSyncing || isTestingNotify || isTestingWorkoutNotify || isSubscribingWebhook || isUnsubscribingWebhook
 
   return (
     <div className="auth-dialog-backdrop" role="presentation" onClick={onClose}>
@@ -99,7 +106,7 @@ export function WithingsSettingsDialog({
               <strong>{lastSyncedValue}</strong>
             </p>
           </div>
-          <div className="auth-step-actions twitter-template-actions">
+          <div className="auth-step-actions twitter-template-actions withings-settings-actions">
             <button className="admin-button ghost" type="button" onClick={onConnect} disabled={isBusy}>
               {connectLabel}
             </button>
@@ -119,6 +126,9 @@ export function WithingsSettingsDialog({
             </button>
             <button className="admin-button ghost" type="button" onClick={onTestNotify} disabled={!canSync || isBusy}>
               {notifyTestLabel}
+            </button>
+            <button className="admin-button ghost" type="button" onClick={onTestWorkoutNotify} disabled={!canSync || isBusy}>
+              {workoutNotifyTestLabel}
             </button>
           </div>
         </div>
