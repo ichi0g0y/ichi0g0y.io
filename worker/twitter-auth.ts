@@ -161,20 +161,23 @@ export async function handleTwitterSettingsUpdate(request: Request, env: Env) {
   const body = await readJsonBody<{ template?: string; autoPostEnabled?: boolean; discordWebhookUrl?: string | null }>(request)
   const template = body?.template?.trim() ?? ''
   const autoPostEnabled = body?.autoPostEnabled !== false
+  const discordWebhookUrlProvided = body?.discordWebhookUrl !== undefined
   const discordWebhookUrlInput = body?.discordWebhookUrl?.trim() || ''
-  const discordWebhookUrl = discordWebhookUrlInput ? normalizeDiscordWebhookUrl(discordWebhookUrlInput) : null
   if (!template) {
     return errorResponse('投稿テンプレートを入力してください', 400)
   }
   if (template.length > TWITTER_TEMPLATE_MAX_LENGTH) {
     return errorResponse('投稿テンプレートが長すぎます', 400)
   }
-  if (discordWebhookUrlInput && !discordWebhookUrl) {
-    return errorResponse('Discord Webhook URL の形式が不正です', 400)
-  }
 
   const now = nowSeconds()
   const existing = await ensureTwitterPostSettings(env)
+  const discordWebhookUrl = discordWebhookUrlProvided
+    ? (discordWebhookUrlInput ? normalizeDiscordWebhookUrl(discordWebhookUrlInput) : null)
+    : existing.discordWebhookUrl
+  if (discordWebhookUrlProvided && discordWebhookUrlInput && !discordWebhookUrl) {
+    return errorResponse('Discord Webhook URL の形式が不正です', 400)
+  }
   await env.DB.prepare(
     `
       INSERT INTO twitter_post_settings (
@@ -217,7 +220,7 @@ export async function handleTwitterSettingsUpdate(request: Request, env: Env) {
   })
 }
 
-export async function handleDiscordTestNotification(request: Request) {
+export async function handleDiscordTestNotification(request: Request, _env: Env) {
   const body = await readJsonBody<{ discordWebhookUrl?: string | null }>(request)
   const discordWebhookUrlInput = body?.discordWebhookUrl?.trim() || ''
   const discordWebhookUrl = normalizeDiscordWebhookUrl(discordWebhookUrlInput)
