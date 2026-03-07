@@ -11,6 +11,7 @@ import {
 } from './gear'
 import { handleGetImageById } from './image-store'
 import {
+  handleDiscordTestNotification,
   handleTwitterLatestPost,
   handleTwitterOAuthCallback,
   handleTwitterOAuthStart,
@@ -180,6 +181,14 @@ async function routeApi(request: Request, env: Env, ctx?: ExecutionContext) {
       return errorResponse('認証が必要です', 401)
     }
     return handleTwitterSettingsUpdate(request, env)
+  }
+
+  if (method === 'POST' && pathname === '/api/admin/twitter/discord/test') {
+    const auth = await requireAuth(request, env)
+    if (!auth) {
+      return errorResponse('認証が必要です', 401)
+    }
+    return handleDiscordTestNotification(request, env)
   }
 
   if (method === 'POST' && pathname === '/api/admin/twitter/test') {

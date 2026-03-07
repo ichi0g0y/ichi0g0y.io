@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { AddGearDialog } from './components/AddGearDialog'
 import { AuthDialog } from './components/AuthDialog'
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog'
+import { DiscordSettingsDialog } from './components/DiscordSettingsDialog'
 import { EditGearDialog } from './components/EditGearDialog'
 import { RenameCategoryDialog } from './components/RenameCategoryDialog'
 import { TwitterTemplateDialog } from './components/TwitterTemplateDialog'
@@ -130,11 +131,16 @@ function App() {
     isTwitterStatusLoading,
     isTwitterAuthBusy,
     isTwitterTemplateDialogOpen,
+    isDiscordSettingsDialogOpen,
     twitterTemplateDraft,
     setTwitterTemplateDraft,
     twitterAutoPostEnabledDraft,
     setTwitterAutoPostEnabledDraft,
+    discordWebhookUrlDraft,
+    setDiscordWebhookUrlDraft,
     isTwitterTemplateSaving,
+    isDiscordSettingsSaving,
+    isDiscordSettingsTesting,
     isTwitterLatestPosting,
     isTwitterTestPosting,
     twitterAccountLabel,
@@ -146,8 +152,12 @@ function App() {
     handleTwitterConnect,
     handleOpenTwitterTemplateDialog,
     handleCloseTwitterTemplateDialog,
+    handleOpenDiscordSettingsDialog,
+    handleCloseDiscordSettingsDialog,
     handleInsertTwitterPlaceholder,
     handleSaveTwitterTemplate,
+    handleSaveDiscordSettings,
+    handleTestDiscordSettings,
     handleTwitterLatestPost,
     handleTestTwitterPost,
   } = useTwitter({
@@ -165,14 +175,22 @@ function App() {
   })
 
   const handleOpenWithingsSettingsDialogExclusive = useCallback(() => {
+    if (isDiscordSettingsDialogOpen && (isDiscordSettingsSaving || isDiscordSettingsTesting)) {
+      return
+    }
     if (isTwitterTemplateDialogOpen && (isTwitterTemplateSaving || isTwitterLatestPosting || isTwitterTestPosting)) {
       return
     }
     handleCloseTwitterTemplateDialog()
+    handleCloseDiscordSettingsDialog()
     handleOpenWithingsSettingsDialog()
   }, [
+    handleCloseDiscordSettingsDialog,
     handleCloseTwitterTemplateDialog,
     handleOpenWithingsSettingsDialog,
+    isDiscordSettingsDialogOpen,
+    isDiscordSettingsSaving,
+    isDiscordSettingsTesting,
     isTwitterLatestPosting,
     isTwitterTemplateDialogOpen,
     isTwitterTemplateSaving,
@@ -183,11 +201,43 @@ function App() {
     if (isWithingsSettingsDialogOpen && (isWithingsConnecting || isWithingsSyncing || isWithingsNotifyTesting)) {
       return
     }
+    if (isDiscordSettingsDialogOpen && (isDiscordSettingsSaving || isDiscordSettingsTesting)) {
+      return
+    }
     handleCloseWithingsSettingsDialog()
+    handleCloseDiscordSettingsDialog()
     handleOpenTwitterTemplateDialog()
   }, [
     handleCloseWithingsSettingsDialog,
+    handleCloseDiscordSettingsDialog,
     handleOpenTwitterTemplateDialog,
+    isDiscordSettingsDialogOpen,
+    isDiscordSettingsSaving,
+    isDiscordSettingsTesting,
+    isWithingsConnecting,
+    isWithingsNotifyTesting,
+    isWithingsSettingsDialogOpen,
+    isWithingsSyncing,
+  ])
+
+  const handleOpenDiscordSettingsDialogExclusive = useCallback(() => {
+    if (isWithingsSettingsDialogOpen && (isWithingsConnecting || isWithingsSyncing || isWithingsNotifyTesting)) {
+      return
+    }
+    if (isTwitterTemplateDialogOpen && (isTwitterTemplateSaving || isTwitterLatestPosting || isTwitterTestPosting)) {
+      return
+    }
+    handleCloseWithingsSettingsDialog()
+    handleCloseTwitterTemplateDialog()
+    handleOpenDiscordSettingsDialog()
+  }, [
+    handleCloseWithingsSettingsDialog,
+    handleCloseTwitterTemplateDialog,
+    handleOpenDiscordSettingsDialog,
+    isTwitterLatestPosting,
+    isTwitterTemplateDialogOpen,
+    isTwitterTemplateSaving,
+    isTwitterTestPosting,
     isWithingsConnecting,
     isWithingsNotifyTesting,
     isWithingsSettingsDialogOpen,
@@ -399,6 +449,17 @@ function App() {
             aria-label={labels.twitterTemplateEditAria}
           >
             <span>{labels.twitterSettingsButton}</span>
+          </button>
+        ) : null}
+
+        {isAdminEditing ? (
+          <button
+            className="mode-toggle-button"
+            type="button"
+            onClick={handleOpenDiscordSettingsDialogExclusive}
+            disabled={isDiscordSettingsSaving || isDiscordSettingsTesting || isTwitterStatusLoading}
+          >
+            <span>{labels.discordSettingsButton}</span>
           </button>
         ) : null}
 
@@ -1039,6 +1100,28 @@ function App() {
           onInsertPlaceholder={handleInsertTwitterPlaceholder}
           onRefreshChartPreview={() => {
             setTwitterChartPreviewVersion(Date.now())
+          }}
+        />
+      ) : null}
+
+      {isAdminEditing ? (
+        <DiscordSettingsDialog
+          isOpen={isDiscordSettingsDialogOpen}
+          isSaving={isDiscordSettingsSaving}
+          isTesting={isDiscordSettingsTesting}
+          title={labels.discordSettingsDialogTitle}
+          description={labels.twitterDiscordWebhookDescription}
+          webhookLabel={labels.twitterDiscordWebhookLabel}
+          webhookPlaceholder={labels.twitterDiscordWebhookPlaceholder}
+          webhookDescription={labels.twitterDiscordWebhookDescription}
+          saveLabel={isDiscordSettingsSaving ? labels.discordSettingsSaving : labels.discordSettingsSave}
+          testLabel={isDiscordSettingsTesting ? labels.discordSettingsTesting : labels.discordSettingsTest}
+          webhookUrl={discordWebhookUrlDraft}
+          onClose={handleCloseDiscordSettingsDialog}
+          onSubmit={handleSaveDiscordSettings}
+          onSetWebhookUrl={setDiscordWebhookUrlDraft}
+          onTest={() => {
+            void handleTestDiscordSettings()
           }}
         />
       ) : null}
