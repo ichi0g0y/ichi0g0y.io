@@ -174,6 +174,7 @@ function App() {
     showToast,
     setIsEditMode,
     latestMeasurement,
+    recentWeights,
     formatWithingsMeasuredAt,
   })
 
