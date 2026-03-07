@@ -118,6 +118,40 @@
   font-size: 0.82rem;
   line-height: 1.4;
   box-shadow: 0 16px 30px -22px rgba(15, 23, 42, 0.85);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.app-toast-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.app-toast-message {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  flex: 1 1 auto;
+}
+
+.app-toast-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  line-height: 1;
+}
+
+.app-toast-copy:hover {
+  opacity: 0.85;
 }
 
 .app-toast.is-success {

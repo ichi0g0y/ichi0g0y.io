@@ -57,9 +57,13 @@ export function useTwitter(deps: UseTwitterDeps) {
   const [isTwitterStatusLoading, setIsTwitterStatusLoading] = useState(false)
   const [isTwitterAuthBusy, setIsTwitterAuthBusy] = useState(false)
   const [isTwitterTemplateDialogOpen, setIsTwitterTemplateDialogOpen] = useState(false)
+  const [isDiscordSettingsDialogOpen, setIsDiscordSettingsDialogOpen] = useState(false)
   const [twitterTemplateDraft, setTwitterTemplateDraft] = useState(DEFAULT_TWITTER_TEMPLATE)
   const [twitterAutoPostEnabledDraft, setTwitterAutoPostEnabledDraft] = useState(true)
+  const [discordWebhookUrlDraft, setDiscordWebhookUrlDraft] = useState('')
   const [isTwitterTemplateSaving, setIsTwitterTemplateSaving] = useState(false)
+  const [isDiscordSettingsSaving, setIsDiscordSettingsSaving] = useState(false)
+  const [isDiscordSettingsTesting, setIsDiscordSettingsTesting] = useState(false)
   const [isTwitterLatestPosting, setIsTwitterLatestPosting] = useState(false)
   const [isTwitterTestPosting, setIsTwitterTestPosting] = useState(false)
   const [twitterChartPreviewVersion, setTwitterChartPreviewVersion] = useState(0)
@@ -155,6 +159,7 @@ export function useTwitter(deps: UseTwitterDeps) {
       setTwitterStatus(nextStatus)
       setTwitterTemplateDraft(nextStatus.settings.template || DEFAULT_TWITTER_TEMPLATE)
       setTwitterAutoPostEnabledDraft(nextStatus.settings.autoPostEnabled)
+      setDiscordWebhookUrlDraft(nextStatus.settings.discordWebhookUrl || '')
     } catch (error) {
       const message =
         error instanceof Error
@@ -197,18 +202,32 @@ export function useTwitter(deps: UseTwitterDeps) {
   const handleOpenTwitterTemplateDialog = useCallback(() => {
     setTwitterTemplateDraft(twitterStatus?.settings.template || DEFAULT_TWITTER_TEMPLATE)
     setTwitterAutoPostEnabledDraft(twitterStatus?.settings.autoPostEnabled ?? true)
+    setDiscordWebhookUrlDraft(twitterStatus?.settings.discordWebhookUrl || '')
     setTwitterChartPreviewVersion(Date.now())
     setIsTwitterTemplateDialogOpen(true)
   }, [twitterStatus])
 
   const handleCloseTwitterTemplateDialog = useCallback(() => {
-    if (isTwitterTemplateSaving || isTwitterLatestPosting || isTwitterTestPosting) {
+    if (isTwitterTemplateSaving || isDiscordSettingsSaving || isDiscordSettingsTesting || isTwitterLatestPosting || isTwitterTestPosting) {
       return
     }
     setIsTwitterTemplateDialogOpen(false)
     setTwitterTemplateDraft(twitterStatus?.settings.template || DEFAULT_TWITTER_TEMPLATE)
     setTwitterAutoPostEnabledDraft(twitterStatus?.settings.autoPostEnabled ?? true)
-  }, [isTwitterLatestPosting, isTwitterTemplateSaving, isTwitterTestPosting, twitterStatus])
+  }, [isDiscordSettingsSaving, isDiscordSettingsTesting, isTwitterLatestPosting, isTwitterTemplateSaving, isTwitterTestPosting, twitterStatus])
+
+  const handleOpenDiscordSettingsDialog = useCallback(() => {
+    setDiscordWebhookUrlDraft(twitterStatus?.settings.discordWebhookUrl || '')
+    setIsDiscordSettingsDialogOpen(true)
+  }, [twitterStatus])
+
+  const handleCloseDiscordSettingsDialog = useCallback(() => {
+    if (isDiscordSettingsSaving || isDiscordSettingsTesting) {
+      return
+    }
+    setIsDiscordSettingsDialogOpen(false)
+    setDiscordWebhookUrlDraft(twitterStatus?.settings.discordWebhookUrl || '')
+  }, [isDiscordSettingsSaving, isDiscordSettingsTesting, twitterStatus])
 
   const handleInsertTwitterPlaceholder = useCallback((placeholder: string) => {
     setTwitterTemplateDraft((previous) => {
@@ -234,7 +253,10 @@ export function useTwitter(deps: UseTwitterDeps) {
         const data = (await requestWithAuth('/api/admin/twitter/settings', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ template, autoPostEnabled: twitterAutoPostEnabledDraft }),
+          body: JSON.stringify({
+            template,
+            autoPostEnabled: twitterAutoPostEnabledDraft,
+          }),
         })) as { settings?: TwitterStatus['settings'] }
 
         setTwitterStatus((previous) => ({
@@ -244,6 +266,7 @@ export function useTwitter(deps: UseTwitterDeps) {
           settings: {
             autoPostEnabled: data.settings?.autoPostEnabled ?? twitterAutoPostEnabledDraft,
             template,
+            discordWebhookUrl: data.settings?.discordWebhookUrl ?? previous?.settings.discordWebhookUrl ?? null,
             lastPostedGroupId: data.settings?.lastPostedGroupId ?? previous?.settings.lastPostedGroupId ?? null,
             lastPostedMeasuredAt: data.settings?.lastPostedMeasuredAt ?? previous?.settings.lastPostedMeasuredAt ?? null,
             lastPostedTweetId: data.settings?.lastPostedTweetId ?? previous?.settings.lastPostedTweetId ?? null,
@@ -267,6 +290,78 @@ export function useTwitter(deps: UseTwitterDeps) {
     },
     [activeLanguage, requestWithAuth, showToast, twitterAutoPostEnabledDraft, twitterTemplateDraft],
   )
+
+  const handleSaveDiscordSettings = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+
+      setIsDiscordSettingsSaving(true)
+      try {
+        const data = (await requestWithAuth('/api/admin/twitter/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            template: twitterStatus?.settings.template || DEFAULT_TWITTER_TEMPLATE,
+            autoPostEnabled: twitterStatus?.settings.autoPostEnabled ?? true,
+            discordWebhookUrl: discordWebhookUrlDraft.trim(),
+          }),
+        })) as { settings?: TwitterStatus['settings'] }
+
+        setTwitterStatus((previous) => ({
+          ok: true,
+          connected: previous?.connected ?? false,
+          connection: previous?.connection ?? null,
+          settings: {
+            autoPostEnabled: data.settings?.autoPostEnabled ?? previous?.settings.autoPostEnabled ?? true,
+            template: data.settings?.template ?? previous?.settings.template ?? DEFAULT_TWITTER_TEMPLATE,
+            discordWebhookUrl: data.settings?.discordWebhookUrl ?? (discordWebhookUrlDraft.trim() || null),
+            lastPostedGroupId: data.settings?.lastPostedGroupId ?? previous?.settings.lastPostedGroupId ?? null,
+            lastPostedMeasuredAt: data.settings?.lastPostedMeasuredAt ?? previous?.settings.lastPostedMeasuredAt ?? null,
+            lastPostedTweetId: data.settings?.lastPostedTweetId ?? previous?.settings.lastPostedTweetId ?? null,
+            lastPostedTweetAt: data.settings?.lastPostedTweetAt ?? previous?.settings.lastPostedTweetAt ?? null,
+          },
+        }))
+        setDiscordWebhookUrlDraft(discordWebhookUrlDraft.trim())
+        setIsDiscordSettingsDialogOpen(false)
+        showToast(activeLanguage === 'ja' ? 'Discord通知設定を保存しました。' : 'Saved the Discord notification settings.', 'success')
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : activeLanguage === 'ja'
+              ? 'Discord通知設定の保存に失敗しました。'
+              : 'Failed to save the Discord notification settings.'
+        showToast(message, 'error')
+      } finally {
+        setIsDiscordSettingsSaving(false)
+      }
+    },
+    [activeLanguage, discordWebhookUrlDraft, requestWithAuth, showToast, twitterStatus],
+  )
+
+  const handleTestDiscordSettings = useCallback(async () => {
+    setIsDiscordSettingsTesting(true)
+    try {
+      await requestWithAuth('/api/admin/twitter/discord/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          discordWebhookUrl: discordWebhookUrlDraft.trim(),
+        }),
+      })
+      showToast(activeLanguage === 'ja' ? 'Discordへテスト通知を送信しました。' : 'Sent a test notification to Discord.', 'success')
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : activeLanguage === 'ja'
+            ? 'Discordへのテスト通知送信に失敗しました。'
+            : 'Failed to send a test notification to Discord.'
+      showToast(message, 'error')
+    } finally {
+      setIsDiscordSettingsTesting(false)
+    }
+  }, [activeLanguage, discordWebhookUrlDraft, requestWithAuth, showToast])
 
   const handleTestTwitterPost = useCallback(async () => {
     const template = twitterTemplateDraft.trim()
@@ -373,7 +468,10 @@ export function useTwitter(deps: UseTwitterDeps) {
       setTwitterStatus(null)
       setTwitterTemplateDraft(DEFAULT_TWITTER_TEMPLATE)
       setTwitterAutoPostEnabledDraft(true)
+      setDiscordWebhookUrlDraft('')
       setIsTwitterTemplateDialogOpen(false)
+      setIsDiscordSettingsDialogOpen(false)
+      setIsDiscordSettingsTesting(false)
       return
     }
 
@@ -385,11 +483,16 @@ export function useTwitter(deps: UseTwitterDeps) {
     isTwitterStatusLoading,
     isTwitterAuthBusy,
     isTwitterTemplateDialogOpen,
+    isDiscordSettingsDialogOpen,
     twitterTemplateDraft,
     setTwitterTemplateDraft,
     twitterAutoPostEnabledDraft,
     setTwitterAutoPostEnabledDraft,
+    discordWebhookUrlDraft,
+    setDiscordWebhookUrlDraft,
     isTwitterTemplateSaving,
+    isDiscordSettingsSaving,
+    isDiscordSettingsTesting,
     isTwitterLatestPosting,
     isTwitterTestPosting,
     twitterChartPreviewVersion,
@@ -404,8 +507,12 @@ export function useTwitter(deps: UseTwitterDeps) {
     handleTwitterConnect,
     handleOpenTwitterTemplateDialog,
     handleCloseTwitterTemplateDialog,
+    handleOpenDiscordSettingsDialog,
+    handleCloseDiscordSettingsDialog,
     handleInsertTwitterPlaceholder,
     handleSaveTwitterTemplate,
+    handleSaveDiscordSettings,
+    handleTestDiscordSettings,
     handleTwitterLatestPost,
     handleTestTwitterPost,
   }

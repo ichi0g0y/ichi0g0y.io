@@ -11,6 +11,7 @@ import {
 } from './gear'
 import { handleGetImageById } from './image-store'
 import {
+  handleDiscordTestNotification,
   handleTwitterLatestPost,
   handleTwitterOAuthCallback,
   handleTwitterOAuthStart,
@@ -25,7 +26,9 @@ import {
   handleWithingsAuthCallback,
   handleWithingsAuthStart,
   handleWithingsNotify,
+  handleWithingsNotifySubscribe,
   handleWithingsNotifySimulation,
+  handleWithingsNotifyUnsubscribe,
   handleWithingsStatus,
   handleWithingsSync,
 } from './withings'
@@ -180,6 +183,14 @@ async function routeApi(request: Request, env: Env, ctx?: ExecutionContext) {
     return handleTwitterSettingsUpdate(request, env)
   }
 
+  if (method === 'POST' && pathname === '/api/admin/twitter/discord/test') {
+    const auth = await requireAuth(request, env)
+    if (!auth) {
+      return errorResponse('認証が必要です', 401)
+    }
+    return handleDiscordTestNotification(request, env)
+  }
+
   if (method === 'POST' && pathname === '/api/admin/twitter/test') {
     const auth = await requireAuth(request, env)
     if (!auth) {
@@ -202,6 +213,22 @@ async function routeApi(request: Request, env: Env, ctx?: ExecutionContext) {
       return errorResponse('認証が必要です', 401)
     }
     return handleWithingsSync(env, request)
+  }
+
+  if (method === 'POST' && pathname === '/api/admin/withings/webhook/subscribe') {
+    const auth = await requireAuth(request, env)
+    if (!auth) {
+      return errorResponse('認証が必要です', 401)
+    }
+    return handleWithingsNotifySubscribe(request, env)
+  }
+
+  if (method === 'POST' && pathname === '/api/admin/withings/webhook/unsubscribe') {
+    const auth = await requireAuth(request, env)
+    if (!auth) {
+      return errorResponse('認証が必要です', 401)
+    }
+    return handleWithingsNotifyUnsubscribe(request, env)
   }
 
   if (method === 'POST' && pathname === '/api/admin/withings/notify-test') {

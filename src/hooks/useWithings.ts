@@ -20,6 +20,12 @@ type Labels = {
   withingsChartBmi: string
   withingsChartFatRatio: string
   withingsSettingsLastSyncedEmpty: string
+  withingsWebhookSubscribed: string
+  withingsWebhookUnsubscribed: string
+  withingsWebhookSubscribeButton: string
+  withingsWebhookSubscribingButton: string
+  withingsWebhookUnsubscribeButton: string
+  withingsWebhookUnsubscribingButton: string
 }
 
 export type UseWithingsDeps = {
@@ -135,6 +141,8 @@ export function useWithings(deps: UseWithingsDeps) {
   const [isWithingsConnecting, setIsWithingsConnecting] = useState(false)
   const [isWithingsSyncing, setIsWithingsSyncing] = useState(false)
   const [isWithingsNotifyTesting, setIsWithingsNotifyTesting] = useState(false)
+  const [isWithingsWebhookSubscribing, setIsWithingsWebhookSubscribing] = useState(false)
+  const [isWithingsWebhookUnsubscribing, setIsWithingsWebhookUnsubscribing] = useState(false)
   const [selectedWithingsView, setSelectedWithingsView] = useState<'weight' | 'workout'>('weight')
   const [isWithingsSettingsDialogOpen, setIsWithingsSettingsDialogOpen] = useState(false)
 
@@ -181,6 +189,7 @@ export function useWithings(deps: UseWithingsDeps) {
   const withingsLastSyncedLabel = withingsStatus?.connection?.lastSyncedAt
     ? formatWithingsMeasuredAt(withingsStatus.connection.lastSyncedAt)
     : labels.withingsSettingsLastSyncedEmpty
+  const isWithingsWebhookSubscribed = Boolean(withingsStatus?.connection?.notifyCallbackUrl)
 
   const loadWithingsStatus = useCallback(async () => {
     setIsWithingsLoading(true)
@@ -283,16 +292,87 @@ export function useWithings(deps: UseWithingsDeps) {
     }
   }, [activeLanguage, isWithingsNotifyTesting, loadWithingsStatus, requestWithAuth, showToast])
 
+  const handleWithingsWebhookSubscribe = useCallback(async () => {
+    if (isWithingsWebhookSubscribing) {
+      return
+    }
+    setIsWithingsWebhookSubscribing(true)
+    try {
+      const data = await requestWithAuth('/api/admin/withings/webhook/subscribe', {
+        method: 'POST',
+      })
+      await loadWithingsStatus()
+      const message =
+        typeof data.message === 'string' && data.message.trim() ? data.message : labels.withingsWebhookSubscribed
+      showToast(message, 'success')
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : activeLanguage === 'ja'
+            ? 'Withings通知(Webhook)の登録に失敗しました。'
+            : 'Failed to register the Withings webhook.'
+      showToast(message, 'error')
+    } finally {
+      setIsWithingsWebhookSubscribing(false)
+    }
+  }, [activeLanguage, isWithingsWebhookSubscribing, labels.withingsWebhookSubscribed, loadWithingsStatus, requestWithAuth, showToast])
+
+  const handleWithingsWebhookUnsubscribe = useCallback(async () => {
+    if (isWithingsWebhookUnsubscribing) {
+      return
+    }
+    setIsWithingsWebhookUnsubscribing(true)
+    try {
+      const data = await requestWithAuth('/api/admin/withings/webhook/unsubscribe', {
+        method: 'POST',
+      })
+      await loadWithingsStatus()
+      const message =
+        typeof data.message === 'string' && data.message.trim() ? data.message : labels.withingsWebhookUnsubscribed
+      showToast(message, 'success')
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : activeLanguage === 'ja'
+            ? 'Withings通知(Webhook)の解除に失敗しました。'
+            : 'Failed to unregister the Withings webhook.'
+      showToast(message, 'error')
+    } finally {
+      setIsWithingsWebhookUnsubscribing(false)
+    }
+  }, [
+    activeLanguage,
+    isWithingsWebhookUnsubscribing,
+    labels.withingsWebhookUnsubscribed,
+    loadWithingsStatus,
+    requestWithAuth,
+    showToast,
+  ])
+
   const handleOpenWithingsSettingsDialog = useCallback(() => {
     setIsWithingsSettingsDialogOpen(true)
   }, [])
 
   const handleCloseWithingsSettingsDialog = useCallback(() => {
-    if (isWithingsConnecting || isWithingsSyncing || isWithingsNotifyTesting) {
+    if (
+      isWithingsConnecting ||
+      isWithingsSyncing ||
+      isWithingsNotifyTesting ||
+      isWithingsWebhookSubscribing ||
+      isWithingsWebhookUnsubscribing
+    ) {
       return
     }
     setIsWithingsSettingsDialogOpen(false)
-  }, [isWithingsConnecting, isWithingsNotifyTesting, isWithingsSyncing])
+  }, [
+    isWithingsConnecting,
+    isWithingsNotifyTesting,
+    isWithingsSyncing,
+    isWithingsWebhookSubscribing,
+    isWithingsWebhookUnsubscribing,
+  ])
 
   useEffect(() => {
     void loadWithingsStatus()
@@ -346,6 +426,9 @@ export function useWithings(deps: UseWithingsDeps) {
     isWithingsConnecting,
     isWithingsSyncing,
     isWithingsNotifyTesting,
+    isWithingsWebhookSubscribing,
+    isWithingsWebhookUnsubscribing,
+    isWithingsWebhookSubscribed,
     selectedWithingsView,
     setSelectedWithingsView,
     isWithingsSettingsDialogOpen,
@@ -365,6 +448,8 @@ export function useWithings(deps: UseWithingsDeps) {
     handleWithingsConnect,
     handleWithingsSync,
     handleWithingsNotifyTest,
+    handleWithingsWebhookSubscribe,
+    handleWithingsWebhookUnsubscribe,
     handleOpenWithingsSettingsDialog,
     handleCloseWithingsSettingsDialog,
   }

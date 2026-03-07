@@ -1,9 +1,10 @@
-import { ChevronUpIcon, Cross2Icon, EyeOpenIcon, GlobeIcon, MoonIcon, Pencil2Icon, PlusIcon, SunIcon } from '@radix-ui/react-icons'
+import { ChevronUpIcon, CopyIcon, Cross2Icon, EyeOpenIcon, GlobeIcon, MoonIcon, Pencil2Icon, PlusIcon, SunIcon } from '@radix-ui/react-icons'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 import { AddGearDialog } from './components/AddGearDialog'
 import { AuthDialog } from './components/AuthDialog'
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog'
+import { DiscordSettingsDialog } from './components/DiscordSettingsDialog'
 import { EditGearDialog } from './components/EditGearDialog'
 import { RenameCategoryDialog } from './components/RenameCategoryDialog'
 import { TwitterTemplateDialog } from './components/TwitterTemplateDialog'
@@ -57,6 +58,17 @@ function App() {
   }, [])
   const typedChars = useTypewriter(introChars)
   const { toast, showToast } = useToast()
+  const handleCopyToast = useCallback(async () => {
+    if (!toast?.message || typeof navigator === 'undefined' || !navigator.clipboard) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(toast.message)
+      showToast(activeLanguage === 'ja' ? 'トースト内容をコピーしました。' : 'Copied the toast message.', 'info')
+    } catch {
+      showToast(activeLanguage === 'ja' ? 'コピーに失敗しました。' : 'Failed to copy the toast message.', 'error')
+    }
+  }, [activeLanguage, showToast, toast])
   const isTypingDone = typedChars.length >= introChars.length
   const titleAreaRef = useRef<HTMLElement | null>(null)
 
@@ -82,6 +94,9 @@ function App() {
     isWithingsConnecting,
     isWithingsSyncing,
     isWithingsNotifyTesting,
+    isWithingsWebhookSubscribing,
+    isWithingsWebhookUnsubscribing,
+    isWithingsWebhookSubscribed,
     selectedWithingsView,
     setSelectedWithingsView,
     isWithingsSettingsDialogOpen,
@@ -100,6 +115,8 @@ function App() {
     handleWithingsConnect,
     handleWithingsSync,
     handleWithingsNotifyTest,
+    handleWithingsWebhookSubscribe,
+    handleWithingsWebhookUnsubscribe,
     handleOpenWithingsSettingsDialog,
     handleCloseWithingsSettingsDialog,
   } = useWithings({
@@ -114,11 +131,16 @@ function App() {
     isTwitterStatusLoading,
     isTwitterAuthBusy,
     isTwitterTemplateDialogOpen,
+    isDiscordSettingsDialogOpen,
     twitterTemplateDraft,
     setTwitterTemplateDraft,
     twitterAutoPostEnabledDraft,
     setTwitterAutoPostEnabledDraft,
+    discordWebhookUrlDraft,
+    setDiscordWebhookUrlDraft,
     isTwitterTemplateSaving,
+    isDiscordSettingsSaving,
+    isDiscordSettingsTesting,
     isTwitterLatestPosting,
     isTwitterTestPosting,
     twitterAccountLabel,
@@ -130,8 +152,12 @@ function App() {
     handleTwitterConnect,
     handleOpenTwitterTemplateDialog,
     handleCloseTwitterTemplateDialog,
+    handleOpenDiscordSettingsDialog,
+    handleCloseDiscordSettingsDialog,
     handleInsertTwitterPlaceholder,
     handleSaveTwitterTemplate,
+    handleSaveDiscordSettings,
+    handleTestDiscordSettings,
     handleTwitterLatestPost,
     handleTestTwitterPost,
   } = useTwitter({
@@ -149,14 +175,22 @@ function App() {
   })
 
   const handleOpenWithingsSettingsDialogExclusive = useCallback(() => {
+    if (isDiscordSettingsDialogOpen && (isDiscordSettingsSaving || isDiscordSettingsTesting)) {
+      return
+    }
     if (isTwitterTemplateDialogOpen && (isTwitterTemplateSaving || isTwitterLatestPosting || isTwitterTestPosting)) {
       return
     }
     handleCloseTwitterTemplateDialog()
+    handleCloseDiscordSettingsDialog()
     handleOpenWithingsSettingsDialog()
   }, [
+    handleCloseDiscordSettingsDialog,
     handleCloseTwitterTemplateDialog,
     handleOpenWithingsSettingsDialog,
+    isDiscordSettingsDialogOpen,
+    isDiscordSettingsSaving,
+    isDiscordSettingsTesting,
     isTwitterLatestPosting,
     isTwitterTemplateDialogOpen,
     isTwitterTemplateSaving,
@@ -167,11 +201,43 @@ function App() {
     if (isWithingsSettingsDialogOpen && (isWithingsConnecting || isWithingsSyncing || isWithingsNotifyTesting)) {
       return
     }
+    if (isDiscordSettingsDialogOpen && (isDiscordSettingsSaving || isDiscordSettingsTesting)) {
+      return
+    }
     handleCloseWithingsSettingsDialog()
+    handleCloseDiscordSettingsDialog()
     handleOpenTwitterTemplateDialog()
   }, [
     handleCloseWithingsSettingsDialog,
+    handleCloseDiscordSettingsDialog,
     handleOpenTwitterTemplateDialog,
+    isDiscordSettingsDialogOpen,
+    isDiscordSettingsSaving,
+    isDiscordSettingsTesting,
+    isWithingsConnecting,
+    isWithingsNotifyTesting,
+    isWithingsSettingsDialogOpen,
+    isWithingsSyncing,
+  ])
+
+  const handleOpenDiscordSettingsDialogExclusive = useCallback(() => {
+    if (isWithingsSettingsDialogOpen && (isWithingsConnecting || isWithingsSyncing || isWithingsNotifyTesting)) {
+      return
+    }
+    if (isTwitterTemplateDialogOpen && (isTwitterTemplateSaving || isTwitterLatestPosting || isTwitterTestPosting)) {
+      return
+    }
+    handleCloseWithingsSettingsDialog()
+    handleCloseTwitterTemplateDialog()
+    handleOpenDiscordSettingsDialog()
+  }, [
+    handleCloseWithingsSettingsDialog,
+    handleCloseTwitterTemplateDialog,
+    handleOpenDiscordSettingsDialog,
+    isTwitterLatestPosting,
+    isTwitterTemplateDialogOpen,
+    isTwitterTemplateSaving,
+    isTwitterTestPosting,
     isWithingsConnecting,
     isWithingsNotifyTesting,
     isWithingsSettingsDialogOpen,
@@ -383,6 +449,17 @@ function App() {
             aria-label={labels.twitterTemplateEditAria}
           >
             <span>{labels.twitterSettingsButton}</span>
+          </button>
+        ) : null}
+
+        {isAdminEditing ? (
+          <button
+            className="mode-toggle-button"
+            type="button"
+            onClick={handleOpenDiscordSettingsDialogExclusive}
+            disabled={isDiscordSettingsSaving || isDiscordSettingsTesting || isTwitterStatusLoading}
+          >
+            <span>{labels.discordSettingsButton}</span>
           </button>
         ) : null}
 
@@ -929,10 +1006,20 @@ function App() {
           isConnecting={isWithingsConnecting}
           isSyncing={isWithingsSyncing}
           isTestingNotify={isWithingsNotifyTesting}
+          isSubscribingWebhook={isWithingsWebhookSubscribing}
+          isUnsubscribingWebhook={isWithingsWebhookUnsubscribing}
           title={labels.withingsSettingsDialogTitle}
           description={labels.withingsConnectHint}
           connectLabel={labels.withingsConnectButton}
           syncLabel={labels.withingsSyncButton}
+          subscribeWebhookLabel={
+            isWithingsWebhookSubscribing ? labels.withingsWebhookSubscribingButton : labels.withingsWebhookSubscribeButton
+          }
+          unsubscribeWebhookLabel={
+            isWithingsWebhookUnsubscribing
+              ? labels.withingsWebhookUnsubscribingButton
+              : labels.withingsWebhookUnsubscribeButton
+          }
           notifyTestLabel={isWithingsNotifyTesting ? labels.withingsNotifyTestingButton : labels.withingsNotifyTestButton}
           statusLabel={labels.withingsStatusLabel}
           statusValue={withingsStatusValue}
@@ -947,10 +1034,18 @@ function App() {
           onSync={() => {
             void handleWithingsSync()
           }}
+          onSubscribeWebhook={() => {
+            void handleWithingsWebhookSubscribe()
+          }}
+          onUnsubscribeWebhook={() => {
+            void handleWithingsWebhookUnsubscribe()
+          }}
           onTestNotify={() => {
             void handleWithingsNotifyTest()
           }}
           canSync={Boolean(withingsStatus?.connected)}
+          canManageWebhook={Boolean(withingsStatus?.connected)}
+          canUnsubscribeWebhook={Boolean(withingsStatus?.connected) && isWithingsWebhookSubscribed}
         />
       ) : null}
 
@@ -1009,6 +1104,28 @@ function App() {
         />
       ) : null}
 
+      {isAdminEditing ? (
+        <DiscordSettingsDialog
+          isOpen={isDiscordSettingsDialogOpen}
+          isSaving={isDiscordSettingsSaving}
+          isTesting={isDiscordSettingsTesting}
+          title={labels.discordSettingsDialogTitle}
+          description={labels.twitterDiscordWebhookDescription}
+          webhookLabel={labels.twitterDiscordWebhookLabel}
+          webhookPlaceholder={labels.twitterDiscordWebhookPlaceholder}
+          webhookDescription={labels.twitterDiscordWebhookDescription}
+          saveLabel={isDiscordSettingsSaving ? labels.discordSettingsSaving : labels.discordSettingsSave}
+          testLabel={isDiscordSettingsTesting ? labels.discordSettingsTesting : labels.discordSettingsTest}
+          webhookUrl={discordWebhookUrlDraft}
+          onClose={handleCloseDiscordSettingsDialog}
+          onSubmit={handleSaveDiscordSettings}
+          onSetWebhookUrl={setDiscordWebhookUrlDraft}
+          onTest={() => {
+            void handleTestDiscordSettings()
+          }}
+        />
+      ) : null}
+
       <AuthDialog
         isOpen={isAuthDialogOpen}
         accessToken={accessToken}
@@ -1022,7 +1139,17 @@ function App() {
 
       {toast ? (
         <div className={`app-toast is-${toast.tone}`} role="status" aria-live="polite">
-          {toast.message}
+          <div className="app-toast-row">
+            <p className="app-toast-message">{toast.message}</p>
+            <button
+              type="button"
+              className="app-toast-copy"
+              onClick={() => void handleCopyToast()}
+              aria-label={activeLanguage === 'ja' ? 'トースト内容をコピー' : 'Copy toast message'}
+            >
+              <CopyIcon />
+            </button>
+          </div>
         </div>
       ) : null}
 

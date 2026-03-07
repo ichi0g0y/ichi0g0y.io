@@ -9,6 +9,7 @@ import type {
   WithingsConnectionRow,
   WithingsHeartBody,
   WithingsMeasureBody,
+  WithingsNotifyUnsubscribeResult,
   WithingsNotifySubscribeResult,
   WithingsSleepBody,
   WithingsTokenBody,
@@ -414,6 +415,58 @@ async function subscribeNotifyForCallbackUrl(
   }
 }
 
+async function unsubscribeNotifyForCallbackUrl(
+  callbackUrl: string,
+  connection: WithingsConnection,
+): Promise<{
+  ok: boolean
+  callbackUrl: string
+  status: number | null
+  error: string | null
+  unsubscribedApplis: number[]
+  failedApplis: number[]
+}> {
+  const alreadyMissingStatus = 2554
+  const unsubscribedApplis: number[] = []
+  const alreadyMissingApplis: number[] = []
+  const failedApplis: number[] = []
+  let lastStatus: number | null = null
+  let lastError: string | null = null
+
+  for (const appli of WITHINGS_NOTIFY_APPLIS) {
+    const params = new URLSearchParams()
+    params.set('action', 'unsubscribe')
+    params.set('callbackurl', callbackUrl)
+    params.set('appli', String(appli))
+
+    const { payload } = await postWithingsForm<Record<string, unknown>>(WITHINGS_NOTIFY_URL, params, connection.accessToken)
+    const status = typeof payload?.status === 'number' ? payload.status : null
+    const ok = status === 0
+    if (ok) {
+      unsubscribedApplis.push(appli)
+      continue
+    }
+    if (status === alreadyMissingStatus) {
+      alreadyMissingApplis.push(appli)
+      lastStatus = status
+      lastError = payload?.error ?? null
+      continue
+    }
+    failedApplis.push(appli)
+    lastStatus = status
+    lastError = payload?.error ?? null
+  }
+
+  return {
+    ok: unsubscribedApplis.length > 0 || alreadyMissingApplis.length === WITHINGS_NOTIFY_APPLIS.length,
+    callbackUrl,
+    status: lastStatus,
+    error: lastError,
+    unsubscribedApplis,
+    failedApplis,
+  }
+}
+
 export async function subscribeNotify(request: Request, env: Env, connection: WithingsConnection): Promise<WithingsNotifySubscribeResult> {
   const primaryCallbackUrl = getWithingsNotifyCallbackUrl(request, env)
   const primaryResult = await subscribeNotifyForCallbackUrl(primaryCallbackUrl, connection)
@@ -438,6 +491,31 @@ export async function subscribeNotify(request: Request, env: Env, connection: Wi
   }
 }
 
+export async function unsubscribeNotify(request: Request, env: Env, connection: WithingsConnection): Promise<WithingsNotifyUnsubscribeResult> {
+  const callbackUrls = Array.from(
+    new Set(
+      [
+        connection.notifyCallbackUrl?.trim() || null,
+        getWithingsNotifyCallbackUrl(request, env),
+        appendWithingsNotifySecret(getWithingsCallbackUrl(request, env), env),
+      ].filter((value): value is string => Boolean(value?.trim())),
+    ),
+  )
+
+  const results = await Promise.all(callbackUrls.map((callbackUrl) => unsubscribeNotifyForCallbackUrl(callbackUrl, connection)))
+  const successfulResults = results.filter((result) => result.ok)
+  const latestResult = results.at(-1) ?? null
+
+  return {
+    ok: successfulResults.length > 0,
+    callbackUrls,
+    status: successfulResults.at(-1)?.status ?? latestResult?.status ?? null,
+    error: successfulResults.length > 0 ? null : latestResult?.error ?? null,
+    unsubscribedApplis: Array.from(new Set(successfulResults.flatMap((result) => result.unsubscribedApplis))),
+    failedApplis: Array.from(new Set(results.flatMap((result) => result.failedApplis))),
+  }
+}
+
 export async function markNotifySubscription(env: Env, connection: WithingsConnection, callbackUrl: string) {
   const refreshedConnection = await getStoredConnection(env)
   const now = nowSeconds()
@@ -456,6 +534,24 @@ export async function markNotifySubscription(env: Env, connection: WithingsConne
   return {
     callbackUrl: callbackUrl || source.notifyCallbackUrl,
     notifySubscribedAt,
+  }
+}
+
+export async function clearNotifySubscription(env: Env) {
+  const now = nowSeconds()
+  await env.DB.prepare(
+    `
+      UPDATE withings_connections
+      SET notify_callback_url = NULL, notify_subscribed_at = NULL, updated_at = ?1
+      WHERE id = 1
+    `,
+  )
+    .bind(now)
+    .run()
+
+  return {
+    notifyCallbackUrl: null,
+    notifySubscribedAt: null,
   }
 }
 
