@@ -244,6 +244,22 @@ function trimTrailingZeros(value: number, fractionDigits: number) {
   return value.toFixed(fractionDigits).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
 }
 
+function formatSignedFixed(value: number | null, fractionDigits: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return ''
+  }
+
+  const fixed = value.toFixed(fractionDigits)
+  const rounded = Number(fixed)
+  if (rounded > 0) {
+    return `+${fixed}`
+  }
+  if (rounded === 0) {
+    return fixed.replace(/^-/, '')
+  }
+  return fixed
+}
+
 function formatTweetDate(epochSec: number) {
   return new Intl.DateTimeFormat('ja-JP', {
     timeZone: JST_TIME_ZONE,
@@ -265,6 +281,7 @@ function formatTweetTime(epochSec: number) {
 function buildTemplateValues(measurement: WithingsMeasurementForTweet) {
   return new Map<string, string>([
     ['weight', measurement.weightKg === null ? '' : trimTrailingZeros(measurement.weightKg, 2)],
+    ['weight_diff', formatSignedFixed(measurement.weightDiffKg, 2)],
     ['fat_ratio', measurement.fatRatio === null ? '' : trimTrailingZeros(measurement.fatRatio, 2)],
     ['bmi', measurement.bmi === null ? '' : trimTrailingZeros(measurement.bmi, 2)],
     ['measured_at', `${formatTweetDate(measurement.measuredAt)} ${formatTweetTime(measurement.measuredAt)} JST`],
@@ -333,25 +350,62 @@ async function getWithingsMeasurementForTweet(
     : userId
       ? statement.bind(userId)
       : statement
-  return query
-    .first<{
-      grpid: number
-      measured_at: number
-      weight_kg: number | null
-      fat_ratio: number | null
-      bmi: number | null
-    }>()
-    .then((row) =>
-      row
-        ? {
-            grpid: row.grpid,
-            measuredAt: row.measured_at,
-            weightKg: row.weight_kg,
-            fatRatio: row.fat_ratio,
-            bmi: row.bmi,
-          }
+  const row = await query.first<{
+    grpid: number
+    measured_at: number
+    weight_kg: number | null
+    fat_ratio: number | null
+    bmi: number | null
+  }>()
+
+  if (!row) {
+    return null
+  }
+
+  const previousSql = userId
+    ? `
+      SELECT weight_kg
+      FROM withings_measurements
+      WHERE userid = ?1
+        AND weight_kg IS NOT NULL
+        AND (
+          measured_at < ?2
+          OR (measured_at = ?2 AND grpid < ?3)
+        )
+      ORDER BY measured_at DESC, grpid DESC
+      LIMIT 1
+    `
+    : `
+      SELECT weight_kg
+      FROM withings_measurements
+      WHERE weight_kg IS NOT NULL
+        AND (
+          measured_at < ?1
+          OR (measured_at = ?1 AND grpid < ?2)
+        )
+      ORDER BY measured_at DESC, grpid DESC
+      LIMIT 1
+    `
+  const previousRow = userId
+    ? await env.DB.prepare(previousSql)
+        .bind(userId, row.measured_at, row.grpid)
+        .first<{ weight_kg: number | null }>()
+    : await env.DB.prepare(previousSql)
+        .bind(row.measured_at, row.grpid)
+        .first<{ weight_kg: number | null }>()
+  const previousWeightKg = previousRow?.weight_kg ?? null
+
+  return {
+    grpid: row.grpid,
+    measuredAt: row.measured_at,
+    weightKg: row.weight_kg,
+    weightDiffKg:
+      typeof row.weight_kg === 'number' && Number.isFinite(row.weight_kg) && typeof previousWeightKg === 'number'
+        ? row.weight_kg - previousWeightKg
         : null,
-    )
+    fatRatio: row.fat_ratio,
+    bmi: row.bmi,
+  }
 }
 
 export async function createTwitterPost(env: Env, options: CreateTwitterPostOptions): Promise<CreateTwitterPostResult> {
