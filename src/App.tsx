@@ -10,6 +10,7 @@ import { RenameCategoryDialog } from './components/RenameCategoryDialog'
 import { TwitterTemplateDialog } from './components/TwitterTemplateDialog'
 import { WithingsSettingsDialog } from './components/WithingsSettingsDialog'
 import { WithingsTrendChart } from './components/WithingsTrendChart'
+import { WithingsWorkoutCards } from './components/WithingsWorkoutCards'
 import { IS_LIVE, TWITCH_CHANNEL, links } from './constants'
 import { useAuth } from './hooks/useAuth'
 import { useGear } from './hooks/useGear'
@@ -17,7 +18,7 @@ import { useTheme, type AppLocalePreference, type AppThemePreference } from './h
 import { useToast } from './hooks/useToast'
 import { useTwitter } from './hooks/useTwitter'
 import { useTypewriter } from './hooks/useTypewriter'
-import { useWithings, formatCalories, formatDistanceMeters, formatDuration, formatWorkoutDetailValue } from './hooks/useWithings'
+import { useWithings } from './hooks/useWithings'
 import { createIntroMessage } from './utils'
 
 function App() {
@@ -94,6 +95,7 @@ function App() {
     isWithingsConnecting,
     isWithingsSyncing,
     isWithingsNotifyTesting,
+    isWithingsWorkoutNotifyTesting,
     isWithingsWebhookSubscribing,
     isWithingsWebhookUnsubscribing,
     isWithingsWebhookSubscribed,
@@ -115,6 +117,7 @@ function App() {
     handleWithingsConnect,
     handleWithingsSync,
     handleWithingsNotifyTest,
+    handleWithingsWorkoutNotifyTest,
     handleWithingsWebhookSubscribe,
     handleWithingsWebhookUnsubscribe,
     handleOpenWithingsSettingsDialog,
@@ -198,7 +201,7 @@ function App() {
   ])
 
   const handleOpenTwitterTemplateDialogExclusive = useCallback(() => {
-    if (isWithingsSettingsDialogOpen && (isWithingsConnecting || isWithingsSyncing || isWithingsNotifyTesting)) {
+    if (isWithingsSettingsDialogOpen && (isWithingsConnecting || isWithingsSyncing || isWithingsNotifyTesting || isWithingsWorkoutNotifyTesting)) {
       return
     }
     if (isDiscordSettingsDialogOpen && (isDiscordSettingsSaving || isDiscordSettingsTesting)) {
@@ -218,10 +221,11 @@ function App() {
     isWithingsNotifyTesting,
     isWithingsSettingsDialogOpen,
     isWithingsSyncing,
+    isWithingsWorkoutNotifyTesting,
   ])
 
   const handleOpenDiscordSettingsDialogExclusive = useCallback(() => {
-    if (isWithingsSettingsDialogOpen && (isWithingsConnecting || isWithingsSyncing || isWithingsNotifyTesting)) {
+    if (isWithingsSettingsDialogOpen && (isWithingsConnecting || isWithingsSyncing || isWithingsNotifyTesting || isWithingsWorkoutNotifyTesting)) {
       return
     }
     if (isTwitterTemplateDialogOpen && (isTwitterTemplateSaving || isTwitterLatestPosting || isTwitterTestPosting)) {
@@ -242,6 +246,7 @@ function App() {
     isWithingsNotifyTesting,
     isWithingsSettingsDialogOpen,
     isWithingsSyncing,
+    isWithingsWorkoutNotifyTesting,
   ])
 
   const {
@@ -639,54 +644,20 @@ function App() {
             <p className="withings-empty-note">{labels.withingsLoadingDetail}</p>
           ) : recentWorkouts.length > 0 ? (
             <>
-              {recentWorkouts.map((workout, index) => {
-                const typeLabel = activeLanguage === 'ja' ? workout.workoutCategoryLabelJa : workout.workoutCategoryLabelEn
-                const whenLabel = formatWithingsMeasuredAt(workout.startAt ?? workout.measuredAt)
-                const workoutDetails = Array.isArray(workout.details) ? workout.details : []
-                const detailByKey = new Map(workoutDetails.map((detail) => [detail.key, detail] as const))
-                const caloriesDetail = detailByKey.get('data.manual_calories') ?? detailByKey.get('data.calories')
-                const distanceDetail = detailByKey.get('data.manual_distance') ?? detailByKey.get('data.distance')
-                const stepsDetail = detailByKey.get('data.steps')
-                const durationDetail = detailByKey.get('data.duration')
-
-                const caloriesLabel = caloriesDetail ? formatWorkoutDetailValue(caloriesDetail) : formatCalories(workout.caloriesKcal)
-                const distanceLabel = distanceDetail ? formatWorkoutDetailValue(distanceDetail) : formatDistanceMeters(workout.distanceMeters)
-                const stepsLabel = stepsDetail
-                  ? formatWorkoutDetailValue(stepsDetail)
-                  : typeof workout.steps === 'number' && Number.isFinite(workout.steps)
-                    ? `${Math.trunc(workout.steps)}`
-                    : '-'
-                const durationLabel = durationDetail ? formatWorkoutDetailValue(durationDetail) : formatDuration(workout.durationSec)
-
-                return (
-                  <div key={`${workout.dataKey}:${index}`} className="withings-metrics withings-workout-metrics">
-                    <p className="withings-metric withings-workout-metric">
-                      <span className="withings-metric-label withings-workout-label">{labels.withingsWorkoutTypeLabel}</span>
-                      <span className="withings-metric-value">{typeLabel}</span>
-                    </p>
-                    <p className="withings-metric withings-workout-metric">
-                      <span className="withings-metric-label withings-workout-label">{labels.withingsWorkoutDateLabel}</span>
-                      <span className="withings-metric-value">{whenLabel}</span>
-                    </p>
-                    <p className="withings-metric withings-workout-metric">
-                      <span className="withings-metric-label withings-workout-label">{labels.withingsWorkoutCaloriesLabel}</span>
-                      <span className="withings-metric-value">{caloriesLabel}</span>
-                    </p>
-                    <p className="withings-metric withings-workout-metric">
-                      <span className="withings-metric-label withings-workout-label">{labels.withingsWorkoutDurationLabel}</span>
-                      <span className="withings-metric-value">{durationLabel}</span>
-                    </p>
-                    <p className="withings-metric withings-workout-metric">
-                      <span className="withings-metric-label withings-workout-label">{labels.withingsWorkoutStepsLabel}</span>
-                      <span className="withings-metric-value">{stepsLabel}</span>
-                    </p>
-                    <p className="withings-metric withings-workout-metric">
-                      <span className="withings-metric-label withings-workout-label">{labels.withingsWorkoutDistanceLabel}</span>
-                      <span className="withings-metric-value">{distanceLabel}</span>
-                    </p>
-                  </div>
-                )
-              })}
+              <WithingsWorkoutCards
+                workouts={recentWorkouts}
+                locale={activeLanguage}
+                labels={{
+                  withingsRecentWorkoutsTitle: labels.withingsRecentWorkoutsTitle,
+                  withingsWorkoutDateLabel: labels.withingsWorkoutDateLabel,
+                  withingsWorkoutDistanceLabel: labels.withingsWorkoutDistanceLabel,
+                  withingsWorkoutCaloriesLabel: labels.withingsWorkoutCaloriesLabel,
+                  withingsWorkoutDurationLabel: labels.withingsWorkoutDurationLabel,
+                  withingsWorkoutStepsLabel: labels.withingsWorkoutStepsLabel,
+                  withingsWorkoutIntensityLabel: labels.withingsWorkoutIntensityLabel,
+                }}
+                formatWithingsMeasuredAt={formatWithingsMeasuredAt}
+              />
             </>
           ) : (
             <p className="withings-empty-note">{labels.withingsNoWorkout}</p>
@@ -1006,6 +977,7 @@ function App() {
           isConnecting={isWithingsConnecting}
           isSyncing={isWithingsSyncing}
           isTestingNotify={isWithingsNotifyTesting}
+          isTestingWorkoutNotify={isWithingsWorkoutNotifyTesting}
           isSubscribingWebhook={isWithingsWebhookSubscribing}
           isUnsubscribingWebhook={isWithingsWebhookUnsubscribing}
           title={labels.withingsSettingsDialogTitle}
@@ -1021,6 +993,11 @@ function App() {
               : labels.withingsWebhookUnsubscribeButton
           }
           notifyTestLabel={isWithingsNotifyTesting ? labels.withingsNotifyTestingButton : labels.withingsNotifyTestButton}
+          workoutNotifyTestLabel={
+            isWithingsWorkoutNotifyTesting
+              ? labels.withingsWorkoutNotifyTestingButton
+              : labels.withingsWorkoutNotifyTestButton
+          }
           statusLabel={labels.withingsStatusLabel}
           statusValue={withingsStatusValue}
           userLabel={labels.withingsSettingsUserLabel}
@@ -1042,6 +1019,9 @@ function App() {
           }}
           onTestNotify={() => {
             void handleWithingsNotifyTest()
+          }}
+          onTestWorkoutNotify={() => {
+            void handleWithingsWorkoutNotifyTest()
           }}
           canSync={Boolean(withingsStatus?.connected)}
           canManageWebhook={Boolean(withingsStatus?.connected)}

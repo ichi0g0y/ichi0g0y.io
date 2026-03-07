@@ -105,6 +105,17 @@
   justify-content: flex-start;
 }
 
+.withings-settings-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  width: 100%;
+}
+
+.withings-settings-actions .admin-button {
+  width: 100%;
+}
+
 .twitter-template-meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -452,4 +463,10 @@
 .edit-image-actions .admin-button {
   flex: 1;
   align-self: auto;
+}
+
+@media (max-width: 640px) {
+  .withings-settings-actions {
+    grid-template-columns: 1fr;
+  }
 }

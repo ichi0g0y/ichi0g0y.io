@@ -26,6 +26,8 @@ type Labels = {
   withingsWebhookSubscribingButton: string
   withingsWebhookUnsubscribeButton: string
   withingsWebhookUnsubscribingButton: string
+  withingsWorkoutNotifyTestButton: string
+  withingsWorkoutNotifyTestingButton: string
 }
 
 export type UseWithingsDeps = {
@@ -141,6 +143,7 @@ export function useWithings(deps: UseWithingsDeps) {
   const [isWithingsConnecting, setIsWithingsConnecting] = useState(false)
   const [isWithingsSyncing, setIsWithingsSyncing] = useState(false)
   const [isWithingsNotifyTesting, setIsWithingsNotifyTesting] = useState(false)
+  const [isWithingsWorkoutNotifyTesting, setIsWithingsWorkoutNotifyTesting] = useState(false)
   const [isWithingsWebhookSubscribing, setIsWithingsWebhookSubscribing] = useState(false)
   const [isWithingsWebhookUnsubscribing, setIsWithingsWebhookUnsubscribing] = useState(false)
   const [selectedWithingsView, setSelectedWithingsView] = useState<'weight' | 'workout'>('weight')
@@ -292,6 +295,36 @@ export function useWithings(deps: UseWithingsDeps) {
     }
   }, [activeLanguage, isWithingsNotifyTesting, loadWithingsStatus, requestWithAuth, showToast])
 
+  const handleWithingsWorkoutNotifyTest = useCallback(async () => {
+    if (isWithingsWorkoutNotifyTesting) {
+      return
+    }
+    setIsWithingsWorkoutNotifyTesting(true)
+    try {
+      const data = await requestWithAuth('/api/admin/withings/notify-test?appli=activity', {
+        method: 'POST',
+      })
+      await loadWithingsStatus()
+      const message =
+        typeof data.message === 'string' && data.message.trim()
+          ? data.message
+          : activeLanguage === 'ja'
+            ? '擬似ワークアウトNotifyを実行しました。'
+            : 'Simulated workout notify executed.'
+      showToast(message, 'info')
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : activeLanguage === 'ja'
+            ? '擬似ワークアウトNotifyの実行に失敗しました。'
+            : 'Failed to run simulated workout notify.'
+      showToast(message, 'error')
+    } finally {
+      setIsWithingsWorkoutNotifyTesting(false)
+    }
+  }, [activeLanguage, isWithingsWorkoutNotifyTesting, loadWithingsStatus, requestWithAuth, showToast])
+
   const handleWithingsWebhookSubscribe = useCallback(async () => {
     if (isWithingsWebhookSubscribing) {
       return
@@ -360,6 +393,7 @@ export function useWithings(deps: UseWithingsDeps) {
       isWithingsConnecting ||
       isWithingsSyncing ||
       isWithingsNotifyTesting ||
+      isWithingsWorkoutNotifyTesting ||
       isWithingsWebhookSubscribing ||
       isWithingsWebhookUnsubscribing
     ) {
@@ -369,6 +403,7 @@ export function useWithings(deps: UseWithingsDeps) {
   }, [
     isWithingsConnecting,
     isWithingsNotifyTesting,
+    isWithingsWorkoutNotifyTesting,
     isWithingsSyncing,
     isWithingsWebhookSubscribing,
     isWithingsWebhookUnsubscribing,
@@ -426,6 +461,7 @@ export function useWithings(deps: UseWithingsDeps) {
     isWithingsConnecting,
     isWithingsSyncing,
     isWithingsNotifyTesting,
+    isWithingsWorkoutNotifyTesting,
     isWithingsWebhookSubscribing,
     isWithingsWebhookUnsubscribing,
     isWithingsWebhookSubscribed,
@@ -448,6 +484,7 @@ export function useWithings(deps: UseWithingsDeps) {
     handleWithingsConnect,
     handleWithingsSync,
     handleWithingsNotifyTest,
+    handleWithingsWorkoutNotifyTest,
     handleWithingsWebhookSubscribe,
     handleWithingsWebhookUnsubscribe,
     handleOpenWithingsSettingsDialog,
