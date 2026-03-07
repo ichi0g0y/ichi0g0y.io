@@ -51,6 +51,7 @@ export type TwitterConnection = {
 export type TwitterPostSettings = {
   autoPostEnabled: boolean
   template: string
+  discordWebhookUrl: string | null
   lastPostedGroupId: number | null
   lastPostedMeasuredAt: number | null
   lastPostedTweetId: string | null

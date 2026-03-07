@@ -1,0 +1,97 @@
+import { ensureTwitterPostSettings } from './twitter-db'
+import { JST_TIME_ZONE } from './twitter-types'
+import type { Env } from './types'
+
+const DISCORD_WEBHOOK_HOSTS = new Set(['discord.com', 'canary.discord.com', 'ptb.discord.com'])
+const DISCORD_CONTENT_MAX_LENGTH = 2000
+
+export function normalizeDiscordWebhookUrl(rawUrl: string | null | undefined) {
+  const value = rawUrl?.trim() || ''
+  if (!value) {
+    return null
+  }
+
+  let parsed: URL
+  try {
+    parsed = new URL(value)
+  } catch {
+    return null
+  }
+
+  if (parsed.protocol !== 'https:' || !DISCORD_WEBHOOK_HOSTS.has(parsed.hostname)) {
+    return null
+  }
+
+  if (!/^\/api\/webhooks\/[^/]+\/[^/]+$/.test(parsed.pathname)) {
+    return null
+  }
+
+  return parsed.toString()
+}
+
+function buildDiscordContent(title: string, lines: Array<string | null | undefined>) {
+  const filteredLines = lines.map((line) => line?.trim() || '').filter(Boolean)
+  const content = [`**${title}**`, ...filteredLines].join('\n')
+  if (content.length <= DISCORD_CONTENT_MAX_LENGTH) {
+    return content
+  }
+  return `${content.slice(0, DISCORD_CONTENT_MAX_LENGTH - 1)}…`
+}
+
+export function formatDiscordTimestamp(epochSec: number | null | undefined) {
+  if (typeof epochSec !== 'number' || !Number.isFinite(epochSec)) {
+    return null
+  }
+
+  return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: JST_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(new Date(epochSec * 1000))
+}
+
+export async function sendDiscordMessage(webhookUrl: string, title: string, lines: Array<string | null | undefined>) {
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify({
+      content: buildDiscordContent(title, lines),
+      allowed_mentions: { parse: [] },
+    }),
+  }).catch((error) => {
+    console.warn('[discord] webhook notify threw exception', error instanceof Error ? error.message : String(error))
+    return null
+  })
+
+  if (!response) {
+    return false
+  }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '')
+    console.warn('[discord] webhook notify failed', {
+      status: response.status,
+      detail: detail.slice(0, 500),
+    })
+    return false
+  }
+
+  return true
+}
+
+export async function notifyDiscord(env: Env, title: string, lines: Array<string | null | undefined>) {
+  const settings = await ensureTwitterPostSettings(env)
+  const webhookUrl = normalizeDiscordWebhookUrl(settings.discordWebhookUrl)
+  if (!webhookUrl) {
+    return false
+  }
+
+  return sendDiscordMessage(webhookUrl, title, lines)
+}
