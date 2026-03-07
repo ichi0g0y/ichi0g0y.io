@@ -107,6 +107,7 @@ export type WithingsMeasurementForTweet = {
   grpid: number
   measuredAt: number
   weightKg: number | null
+  weightDiffKg: number | null
   fatRatio: number | null
   bmi: number | null
 }

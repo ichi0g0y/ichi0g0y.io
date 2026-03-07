@@ -779,10 +779,32 @@ async function syncMeasureGroupsByCategory(
           measuredAt > latestNewWeightMeasurement.measuredAt ||
           (measuredAt === latestNewWeightMeasurement.measuredAt && groupId > latestNewWeightMeasurement.grpid))
       ) {
+        const previousMeasurement = await env.DB.prepare(
+          `
+            SELECT weight_kg
+            FROM withings_measurements
+            WHERE userid = ?1
+              AND weight_kg IS NOT NULL
+              AND (
+                measured_at < ?2
+                OR (measured_at = ?2 AND grpid < ?3)
+              )
+            ORDER BY measured_at DESC, grpid DESC
+            LIMIT 1
+          `,
+        )
+          .bind(result.connection.userId, measuredAt, groupId)
+          .first<{ weight_kg: number | null }>()
+        const previousWeightKg = previousMeasurement?.weight_kg ?? null
+
         latestNewWeightMeasurement = {
           grpid: groupId,
           measuredAt,
           weightKg,
+          weightDiffKg:
+            typeof weightKg === 'number' && Number.isFinite(weightKg) && typeof previousWeightKg === 'number'
+              ? weightKg - previousWeightKg
+              : null,
           fatRatio,
           bmi,
         }

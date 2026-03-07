@@ -1,16 +1,32 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 
-import type { AppLocale, ToastTone, TwitterStatus } from '../types'
+import type { AppLocale, ToastTone, TwitterStatus, WithingsWeightPoint } from '../types'
 import { getTwitterAuthErrorMessage } from '../utils'
 
 export const DEFAULT_TWITTER_TEMPLATE = '体重 {{weight}}kg / 体脂肪率 {{fat_ratio}}% / BMI {{bmi}}\n{{measured_at}}'
-export const TWITTER_TEMPLATE_KEYS = ['weight', 'fat_ratio', 'bmi', 'measured_at', 'measured_date', 'measured_time', 'timestamp'] as const
+export const TWITTER_TEMPLATE_KEYS = ['weight', 'weight_diff', 'fat_ratio', 'bmi', 'measured_at', 'measured_date', 'measured_time', 'timestamp'] as const
 
 export function trimTemplateNumber(value: number | null | undefined, fractionDigits = 2) {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return ''
   }
   return value.toFixed(fractionDigits).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
+}
+
+export function formatSignedTemplateNumber(value: number | null | undefined, fractionDigits = 2) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return ''
+  }
+
+  const fixed = value.toFixed(fractionDigits)
+  const rounded = Number(fixed)
+  if (rounded > 0) {
+    return `+${fixed}`
+  }
+  if (rounded === 0) {
+    return fixed.replace(/^-/, '')
+  }
+  return fixed
 }
 
 export function renderTwitterTemplate(template: string, values: Map<string, string>) {
@@ -38,6 +54,7 @@ export type UseTwitterDeps = {
     bmi?: number | null
     measuredAt: number | null
   } | null
+  recentWeights: WithingsWeightPoint[]
   formatWithingsMeasuredAt: (value: number | null | undefined) => string
 }
 
@@ -50,6 +67,7 @@ export function useTwitter(deps: UseTwitterDeps) {
     showToast,
     setIsEditMode,
     latestMeasurement,
+    recentWeights,
     formatWithingsMeasuredAt,
   } = deps
 
@@ -77,44 +95,51 @@ export function useTwitter(deps: UseTwitterDeps) {
     : labels.twitterTemplateLastPostedEmpty
 
   const twitterTemplatePlaceholders = useMemo(
-    () =>
-      TWITTER_TEMPLATE_KEYS.map((key) => ({
+    () => {
+      const placeholderLabels = activeLanguage === 'ja'
+        ? {
+            weight: '体重',
+            weight_diff: '前回差分',
+            fat_ratio: '体脂肪率',
+            bmi: 'BMI',
+            measured_at: '計測日時',
+            measured_date: '計測日',
+            measured_time: '計測時刻',
+            timestamp: 'UNIX時刻',
+          }
+        : {
+            weight: 'Weight',
+            weight_diff: 'Delta from Previous',
+            fat_ratio: 'Body Fat',
+            bmi: 'BMI',
+            measured_at: 'Measured At',
+            measured_date: 'Measured Date',
+            measured_time: 'Measured Time',
+            timestamp: 'Timestamp',
+          }
+
+      return TWITTER_TEMPLATE_KEYS.map((key) => ({
         key,
         token: `{{${key}}}`,
-        label:
-          key === 'weight'
-            ? activeLanguage === 'ja'
-              ? '体重'
-              : 'Weight'
-            : key === 'fat_ratio'
-              ? activeLanguage === 'ja'
-                ? '体脂肪率'
-                : 'Body Fat'
-              : key === 'bmi'
-                ? 'BMI'
-                : key === 'measured_at'
-                  ? activeLanguage === 'ja'
-                    ? '計測日時'
-                    : 'Measured At'
-                  : key === 'measured_date'
-                    ? activeLanguage === 'ja'
-                      ? '計測日'
-                      : 'Measured Date'
-                    : key === 'measured_time'
-                      ? activeLanguage === 'ja'
-                        ? '計測時刻'
-                        : 'Measured Time'
-                      : activeLanguage === 'ja'
-                        ? 'UNIX時刻'
-                        : 'Timestamp',
-      })),
+        label: placeholderLabels[key],
+      }))
+    },
     [activeLanguage],
   )
 
   const twitterTemplateValues = useMemo(() => {
     const measuredAt = latestMeasurement?.measuredAt ?? Math.floor(Date.now() / 1000)
+    const previousWeightKg = recentWeights.length >= 2 ? recentWeights[recentWeights.length - 2]?.weightKg ?? null : null
+    const weightDiffKg =
+      typeof latestMeasurement?.weightKg === 'number' && Number.isFinite(latestMeasurement.weightKg) && typeof previousWeightKg === 'number'
+        ? latestMeasurement.weightKg - previousWeightKg
+        : latestMeasurement
+          ? null
+          : 0.35
+
     return new Map<string, string>([
       ['weight', trimTemplateNumber(latestMeasurement?.weightKg ?? 70.2)],
+      ['weight_diff', formatSignedTemplateNumber(weightDiffKg)],
       ['fat_ratio', trimTemplateNumber(latestMeasurement?.fatRatio ?? 18.4)],
       ['bmi', trimTemplateNumber(latestMeasurement?.bmi ?? 22.1)],
       ['measured_at', formatWithingsMeasuredAt(measuredAt)],
@@ -128,7 +153,7 @@ export function useTwitter(deps: UseTwitterDeps) {
       ],
       ['timestamp', String(measuredAt)],
     ])
-  }, [activeLanguage, formatWithingsMeasuredAt, latestMeasurement])
+  }, [activeLanguage, formatWithingsMeasuredAt, latestMeasurement, recentWeights])
 
   const twitterTemplatePreview = useMemo(
     () => renderTwitterTemplate(twitterTemplateDraft, twitterTemplateValues),
