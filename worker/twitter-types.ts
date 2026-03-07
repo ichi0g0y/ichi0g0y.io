@@ -47,6 +47,7 @@ export type TwitterConnectionRow = {
 export type TwitterPostSettingsRow = {
   auto_post_enabled: number
   template_text: string
+  discord_webhook_url: string | null
   last_posted_grpid: number | null
   last_posted_measured_at: number | null
   last_posted_tweet_id: string | null
@@ -71,6 +72,7 @@ export type TwitterConnection = {
 export type TwitterPostSettings = {
   autoPostEnabled: boolean
   template: string
+  discordWebhookUrl: string | null
   lastPostedGroupId: number | null
   lastPostedMeasuredAt: number | null
   lastPostedTweetId: string | null
@@ -93,6 +95,7 @@ export type TwitterStatusResponse = {
   settings: {
     autoPostEnabled: boolean
     template: string
+    discordWebhookUrl: string | null
     lastPostedGroupId: number | null
     lastPostedMeasuredAt: number | null
     lastPostedTweetId: string | null

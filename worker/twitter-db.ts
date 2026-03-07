@@ -40,6 +40,7 @@ export function toSettings(row: TwitterPostSettingsRow): TwitterPostSettings {
   return {
     autoPostEnabled: row.auto_post_enabled === 1,
     template: row.template_text,
+    discordWebhookUrl: row.discord_webhook_url,
     lastPostedGroupId: row.last_posted_grpid,
     lastPostedMeasuredAt: row.last_posted_measured_at,
     lastPostedTweetId: row.last_posted_tweet_id,
@@ -66,8 +67,8 @@ export async function getStoredTwitterConnection(env: Env) {
 export async function ensureTwitterPostSettings(env: Env) {
   const existing = await env.DB.prepare(
     `
-      SELECT auto_post_enabled, template_text, last_posted_grpid, last_posted_measured_at, last_posted_tweet_id,
-             last_posted_tweet_at, created_at, updated_at
+      SELECT auto_post_enabled, template_text, discord_webhook_url, last_posted_grpid, last_posted_measured_at,
+             last_posted_tweet_id, last_posted_tweet_at, created_at, updated_at
       FROM twitter_post_settings
       WHERE id = 1
       LIMIT 1
@@ -83,10 +84,10 @@ export async function ensureTwitterPostSettings(env: Env) {
   await env.DB.prepare(
     `
       INSERT INTO twitter_post_settings (
-        id, auto_post_enabled, template_text, last_posted_grpid, last_posted_measured_at,
+        id, auto_post_enabled, template_text, discord_webhook_url, last_posted_grpid, last_posted_measured_at,
         last_posted_tweet_id, last_posted_tweet_at, created_at, updated_at
       )
-      VALUES (?1, ?2, ?3, NULL, NULL, NULL, NULL, ?4, ?4)
+      VALUES (?1, ?2, ?3, NULL, NULL, NULL, NULL, NULL, ?4, ?4)
     `,
   )
     .bind(1, 1, template, now)
@@ -95,6 +96,7 @@ export async function ensureTwitterPostSettings(env: Env) {
   return {
     autoPostEnabled: true,
     template,
+    discordWebhookUrl: null,
     lastPostedGroupId: null,
     lastPostedMeasuredAt: null,
     lastPostedTweetId: null,

@@ -1,5 +1,6 @@
 import type { Env } from './types'
 import { errorResponse, jsonResponse, nowSeconds, parseCookies } from './utils'
+import { formatDiscordTimestamp, notifyDiscord } from './discord-notify'
 import { postLatestWithingsMeasurementTweet } from './twitter-post'
 import type { PostLatestWithingsMeasurementTweetResult } from './twitter-post'
 import type { WithingsMeasurementForTweet } from './twitter-types'
@@ -40,6 +41,30 @@ import {
   unsubscribeNotify,
   upsertConnection,
 } from './withings-sync'
+
+async function notifyWithingsError(
+  env: Env,
+  event: string,
+  message: string,
+  details: Array<string | null | undefined> = [],
+) {
+  await notifyDiscord(env, 'Withings関連エラー', [`event: ${event}`, `message: ${message}`, ...details])
+}
+
+async function notifyAutoTweetSuccess(
+  env: Env,
+  result: WithingsNotifyProcessResult,
+  mode: 'with_image' | 'text_only',
+  tweetId: string | null,
+) {
+  await notifyDiscord(env, 'X投稿成功', [
+    'event: auto_withings_post',
+    `tweetId: ${tweetId ?? '(unknown)'}`,
+    `mode: ${mode}`,
+    `measuredAt: ${formatDiscordTimestamp(result.latestNewWeightMeasurement?.measuredAt) ?? '(unknown)'}`,
+    `postedAt: ${formatDiscordTimestamp(nowSeconds()) ?? '(unknown)'}`,
+  ])
+}
 
 async function parseNotifyPayload(request: Request): Promise<WithingsNotificationPayload> {
   const raw = new Map<string, string>()
@@ -658,6 +683,13 @@ export async function handleWithingsAuthCallback(request: Request, env: Env, ctx
     if (notifyResult.ok) {
       await markNotifySubscription(env, connection, notifyResult.callbackUrl)
     } else {
+      await notifyWithingsError(env, 'auth_callback_notify_subscribe', 'Withings通知(Webhook)の登録に失敗しました。', [
+        `callbackUrl: ${notifyResult.callbackUrl}`,
+        `status: ${notifyResult.status}`,
+        `error: ${notifyResult.error}`,
+        `usedFallback: ${String(notifyResult.usedFallback)}`,
+        `failedApplis: ${notifyResult.failedApplis.join(',')}`,
+      ])
       console.warn(
         '[withings] notify subscribe failed',
         JSON.stringify({
@@ -675,6 +707,9 @@ export async function handleWithingsAuthCallback(request: Request, env: Env, ctx
       try {
         return await syncMeasurements(env, connection, null, null)
       } catch (error) {
+        await notifyWithingsError(env, 'auth_callback_initial_sync_exception', 'Withings初回同期で例外が発生しました。', [
+          error instanceof Error ? `error: ${error.message}` : `error: ${String(error)}`,
+        ])
         console.error(
           '[withings] initial sync threw exception',
           error instanceof Error ? error.stack ?? error.message : String(error),
@@ -683,10 +718,17 @@ export async function handleWithingsAuthCallback(request: Request, env: Env, ctx
       }
     }
     if (ctx) {
-      ctx.waitUntil(syncInBackground())
+      ctx.waitUntil(
+        syncInBackground().then(async (synced) => {
+          if (!synced.ok) {
+            await notifyWithingsError(env, 'auth_callback_initial_sync', 'Withings初回同期に失敗しました。')
+          }
+        }),
+      )
     } else {
       const synced = await syncInBackground()
       if (!synced.ok) {
+        await notifyWithingsError(env, 'auth_callback_initial_sync', 'Withings初回同期に失敗しました。')
         return redirectToApp(request, env, 'connected', 'withings_sync_failed', [clearWithingsStateCookie(request)])
       }
     }
@@ -697,6 +739,9 @@ export async function handleWithingsAuthCallback(request: Request, env: Env, ctx
 
     return redirectToApp(request, env, 'connected', undefined, [clearWithingsStateCookie(request)])
   } catch (error) {
+    await notifyWithingsError(env, 'auth_callback_exception', 'Withings認証コールバックで例外が発生しました。', [
+      error instanceof Error ? `error: ${error.message}` : `error: ${String(error)}`,
+    ])
     console.error(
       '[withings] auth callback threw exception',
       error instanceof Error ? error.stack ?? error.message : String(error),
@@ -769,6 +814,12 @@ export async function handleWithingsNotify(request: Request, env: Env, ctx?: Exe
         },
       })
       if (result.subscriptionRepair.attempted && !result.subscriptionRepair.repaired) {
+        await notifyWithingsError(env, 'notify_subscription_repair', 'Withings通知(Webhook)の購読修復に失敗しました。', [
+          `callbackUrl: ${result.subscriptionRepair.callbackUrl}`,
+          `error: ${result.subscriptionRepair.error}`,
+          `usedFallback: ${String(result.subscriptionRepair.usedFallback)}`,
+          `failedApplis: ${result.subscriptionRepair.failedApplis.join(',')}`,
+        ])
         console.warn('[withings] notify subscription repair failed', {
           callbackUrl: result.subscriptionRepair.callbackUrl,
           error: result.subscriptionRepair.error,
@@ -776,7 +827,24 @@ export async function handleWithingsNotify(request: Request, env: Env, ctx?: Exe
           usedFallback: result.subscriptionRepair.usedFallback,
         })
       }
+      if (result.skipReason === 'connection_not_found') {
+        await notifyWithingsError(env, 'notify_connection_not_found', 'Withings連携が未設定のため通知処理を継続できませんでした。')
+      } else if (result.skipReason === 'payload_user_mismatch') {
+        await notifyWithingsError(env, 'notify_payload_user_mismatch', 'Withings通知のユーザーIDが保存済みユーザーと一致しません。')
+      } else if (result.skipReason === 'sync_failed') {
+        await notifyWithingsError(env, 'notify_sync_failed', 'Withings通知受信後の同期に失敗しました。')
+      } else if (result.tweetAttempted && result.tweetResult && !result.tweetResult.ok) {
+        await notifyWithingsError(env, 'notify_auto_post_failed', 'Withings通知でのX自動投稿に失敗しました。', [
+          `reason: ${result.tweetResult.reason}`,
+          `measuredAt: ${formatDiscordTimestamp(result.latestNewWeightMeasurement?.measuredAt) ?? '(unknown)'}`,
+        ])
+      } else if (result.tweetPosted && result.tweetResult && result.tweetResult.ok) {
+        await notifyAutoTweetSuccess(env, result, result.tweetResult.mode, result.tweetResult.tweetId)
+      }
     } catch (error) {
+      await notifyWithingsError(env, 'notify_exception', 'Withings通知処理で例外が発生しました。', [
+        error instanceof Error ? `error: ${error.message}` : `error: ${String(error)}`,
+      ])
       console.error(
         '[withings] notify sync threw exception',
         error instanceof Error ? error.stack ?? error.message : String(error),
@@ -814,6 +882,7 @@ export async function handleWithingsSync(env: Env, request?: Request) {
 
   const synced = await syncMeasurements(env, connection, startDate, endDate)
   if (!synced.ok) {
+    await notifyWithingsError(env, 'manual_sync_failed', 'Withingsデータの同期に失敗しました。')
     return errorResponse('Withingsデータの同期に失敗しました', 502)
   }
 
@@ -823,6 +892,12 @@ export async function handleWithingsSync(env: Env, request?: Request) {
     if (refreshedConnection) {
       notifySubscription = await repairNotifySubscriptionIfNeeded(request, env, refreshedConnection)
       if (notifySubscription.attempted && !notifySubscription.repaired) {
+        await notifyWithingsError(env, 'manual_sync_subscription_repair', 'Withings通知(Webhook)の購読修復に失敗しました。', [
+          `callbackUrl: ${notifySubscription.callbackUrl}`,
+          `error: ${notifySubscription.error}`,
+          `usedFallback: ${String(notifySubscription.usedFallback)}`,
+          `failedApplis: ${notifySubscription.failedApplis.join(',')}`,
+        ])
         console.warn('[withings] sync notify subscription repair failed', {
           callbackUrl: notifySubscription.callbackUrl,
           error: notifySubscription.error,
@@ -849,6 +924,13 @@ export async function handleWithingsNotifySubscribe(request: Request, env: Env) 
 
   const notifyResult = await subscribeNotify(request, env, connection)
   if (!notifyResult.ok) {
+    await notifyWithingsError(env, 'manual_subscribe_failed', 'Withings通知(Webhook)の登録に失敗しました。', [
+      `callbackUrl: ${notifyResult.callbackUrl}`,
+      `status: ${notifyResult.status}`,
+      `error: ${notifyResult.error}`,
+      `usedFallback: ${String(notifyResult.usedFallback)}`,
+      `failedApplis: ${notifyResult.failedApplis.join(',')}`,
+    ])
     const message = buildNotifySubscriptionMessage('Withings通知(Webhook)の登録に失敗しました。', [
       ['callbackUrl', notifyResult.callbackUrl],
       ['status', notifyResult.status],
@@ -906,6 +988,12 @@ export async function handleWithingsNotifyUnsubscribe(request: Request, env: Env
 
   const notifyResult = await unsubscribeNotify(request, env, connection)
   if (!notifyResult.ok) {
+    await notifyWithingsError(env, 'manual_unsubscribe_failed', 'Withings通知(Webhook)の解除に失敗しました。', [
+      `callbackUrls: ${notifyResult.callbackUrls.join(', ')}`,
+      `status: ${notifyResult.status}`,
+      `error: ${notifyResult.error}`,
+      `failedApplis: ${notifyResult.failedApplis.join(',')}`,
+    ])
     const message = buildNotifySubscriptionMessage('Withings通知(Webhook)の解除に失敗しました。', [
       ['callbackUrls', notifyResult.callbackUrls.join(', ')],
       ['status', notifyResult.status],
@@ -972,6 +1060,9 @@ export async function handleWithingsNotifySimulation(request: Request, env: Env)
     repairSubscription: true,
   })
   if (!result.syncOk) {
+    await notifyWithingsError(env, 'simulate_notify_failed', '擬似Notifyの同期に失敗しました。', [
+      `skipReason: ${result.skipReason ?? '(none)'}`,
+    ])
     return errorResponse(buildSimulatedNotifyMessage(result), 502, {
       syncOk: result.syncOk,
       skipReason: result.skipReason,
