@@ -112,6 +112,140 @@
   color: #6b7280;
 }
 
+.withings-workout-section {
+  margin-top: 0.72rem;
+}
+
+.withings-workout-list {
+  margin-top: 0.55rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.withings-workout-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #dbe4ee;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  padding: 0.9rem;
+  box-shadow: 0 18px 40px -32px rgba(15, 23, 42, 0.48);
+}
+
+.withings-workout-card::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 4px;
+  background: #94a3b8;
+}
+
+.withings-workout-card.is-cycling::after {
+  background: linear-gradient(90deg, #0f766e 0%, #22c55e 100%);
+}
+
+.withings-workout-card.is-walking::after {
+  background: linear-gradient(90deg, #0369a1 0%, #38bdf8 100%);
+}
+
+.withings-workout-card.is-game::after {
+  background: linear-gradient(90deg, #7c3aed 0%, #f97316 100%);
+}
+
+.withings-workout-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.withings-workout-icon {
+  flex: 0 0 auto;
+  width: 2.65rem;
+  height: 2.65rem;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.withings-workout-icon svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.withings-workout-icon.is-cycling {
+  background: #d1fae5;
+  color: #0f766e;
+}
+
+.withings-workout-icon.is-walking {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.withings-workout-icon.is-game {
+  background: #f3e8ff;
+  color: #7c3aed;
+}
+
+.withings-workout-head-copy {
+  min-width: 0;
+}
+
+.withings-workout-kicker {
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.withings-workout-when {
+  margin: 0.14rem 0 0;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.withings-workout-title {
+  margin: 0.24rem 0 0;
+  font-size: 1rem;
+  color: #0f172a;
+}
+
+.withings-workout-stats {
+  margin: 0.8rem 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.withings-workout-stat {
+  margin: 0;
+  padding: 0.62rem 0.66rem;
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid #e5e7eb;
+}
+
+.withings-workout-stat dt {
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.withings-workout-stat dd {
+  margin: 0.16rem 0 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #111827;
+}
+
 .withings-trend {
   margin-top: 0.72rem;
   padding: 0;
@@ -424,6 +558,33 @@ body[data-theme='dark'] .withings-action-button.ghost {
   color: #dbe6f7;
 }
 
+body[data-theme='dark'] .withings-workout-card {
+  border-color: #324663;
+  background: linear-gradient(180deg, #111b2f 0%, #16243f 100%);
+}
+
+body[data-theme='dark'] .withings-workout-kicker,
+body[data-theme='dark'] .withings-workout-when {
+  color: #9fb0c9;
+}
+
+body[data-theme='dark'] .withings-workout-title {
+  color: #f8fafc;
+}
+
+body[data-theme='dark'] .withings-workout-stat {
+  border-color: #324663;
+  background: rgba(15, 23, 42, 0.28);
+}
+
+body[data-theme='dark'] .withings-workout-stat dt {
+  color: #9fb0c9;
+}
+
+body[data-theme='dark'] .withings-workout-stat dd {
+  color: #f1f5f9;
+}
+
 /* レスポンシブ */
 
 @media (max-width: 860px) {
@@ -437,6 +598,10 @@ body[data-theme='dark'] .withings-action-button.ghost {
   }
 
   .withings-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .withings-workout-list {
     grid-template-columns: 1fr;
   }
 
