@@ -796,11 +796,11 @@ export async function handleWithingsNotify(request: Request, env: Env, ctx?: Exe
     return new Response(null, { status: 200 })
   }
 
-  if (method === 'GET' && url.searchParams.size === 0) {
+  if (method === 'GET') {
     return jsonResponse({ ok: true, accepted: true, healthcheck: true })
   }
 
-  if (method === 'POST' && url.searchParams.size === 0) {
+  if (method === 'POST') {
     const rawBody = await request
       .clone()
       .text()
