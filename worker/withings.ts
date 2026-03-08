@@ -1,11 +1,12 @@
 import type { Env } from './types'
 import { errorResponse, jsonResponse, nowSeconds, parseCookies } from './utils'
-import { formatDiscordTimestamp, notifyDiscord } from './discord-notify'
+import { buildDiscordEnvironmentLines, formatDiscordTimestamp, notifyDiscord } from './discord-notify'
 import { postLatestWithingsMeasurementTweet } from './twitter-post'
 import type { PostLatestWithingsMeasurementTweetResult } from './twitter-post'
 import type { WithingsMeasurementForTweet } from './twitter-types'
 import type { WithingsNotificationPayload } from './withings-types'
 import {
+  ACCESS_TOKEN_REFRESH_MARGIN_SEC,
   WITHINGS_NOTIFY_APPLI_ACTIVITY,
   WITHINGS_AUTHORIZE_URL,
   WITHINGS_NOTIFY_APPLI_MEASURE,
@@ -49,7 +50,12 @@ async function notifyWithingsError(
   message: string,
   details: Array<string | null | undefined> = [],
 ) {
-  await notifyDiscord(env, 'Withings関連エラー', [`event: ${event}`, `message: ${message}`, ...details])
+  await notifyDiscord(env, 'Withings関連エラー', [
+    ...buildDiscordEnvironmentLines(env),
+    `event: ${event}`,
+    `message: ${message}`,
+    ...details,
+  ])
 }
 
 async function notifyAutoTweetSuccess(
@@ -228,6 +234,21 @@ async function resolveReadyWithingsConnection(env: Env) {
 
 function buildWithingsConnectionUnavailableMessage() {
   return 'Withings連携情報は保存されていますが、現在利用できません。再連携または設定確認を行ってください。'
+}
+
+function sanitizeWithingsNotifyCallbackUrl(rawUrl: string | null | undefined) {
+  const value = rawUrl?.trim() || ''
+  if (!value) {
+    return null
+  }
+
+  try {
+    const parsed = new URL(value)
+    parsed.search = ''
+    return parsed.toString()
+  } catch {
+    return null
+  }
 }
 
 function normalizeNotifyCallbackPath(rawUrl: string) {
@@ -810,21 +831,35 @@ export async function handleWithingsNotify(request: Request, env: Env, ctx?: Exe
     }
   }
 
-  const payload = await parseNotifyPayload(request)
-  const storedConnection = await getStoredConnection(env)
+  // トークン認証はenv変数の比較のみでDB不要なので、先にチェックして即座にレスポンスを返す。
+  // D1コールドスタート時にgetStoredConnectionが2秒を超えるため、DB操作はすべてwaitUntilに移す。
   const notifySecret = env.WITHINGS_NOTIFY_SECRET?.trim() || null
   const token = url.searchParams.get('token')?.trim() || null
-  const authMode: WithingsNotifyAuthMode | null =
-    notifySecret && token === notifySecret ? 'token' : shouldAllowLegacyNotify(request, storedConnection, payload) ? 'legacy_callback' : null
-  if (!authMode) {
-    if (!notifySecret) {
-      return errorResponse('WITHINGS_NOTIFY_SECRET が未設定です', 401)
-    }
-    return errorResponse('notify token が不正です', 401)
+  const tokenAuthOk = Boolean(notifySecret && token === notifySecret)
+
+  if (!tokenAuthOk && !notifySecret) {
+    return errorResponse('WITHINGS_NOTIFY_SECRET が未設定です', 401)
   }
 
   const runSync = async () => {
     try {
+      const payload = await parseNotifyPayload(request)
+
+      let authMode: WithingsNotifyAuthMode | null = null
+      if (tokenAuthOk) {
+        authMode = 'token'
+      } else {
+        const storedConnection = await getStoredConnection(env)
+        if (shouldAllowLegacyNotify(request, storedConnection, payload)) {
+          authMode = 'legacy_callback'
+        }
+      }
+
+      if (!authMode) {
+        console.warn('[withings] notify auth failed - token mismatch and legacy not allowed')
+        return
+      }
+
       const result = await processWithingsNotify(request, env, payload, {
         authMode,
         dryRun: false,
@@ -868,13 +903,21 @@ export async function handleWithingsNotify(request: Request, env: Env, ctx?: Exe
       if (result.skipReason === 'connection_not_found') {
         await notifyWithingsError(env, 'notify_connection_not_found', 'Withings連携が未設定のため通知処理を継続できませんでした。')
       } else if (result.skipReason === 'connection_unavailable') {
+        const storedConn = await getStoredConnection(env)
+        const now = nowSeconds()
+        const accessExpiresAt = storedConn?.accessExpiresAt ?? null
+        const refreshDue = typeof accessExpiresAt === 'number' ? accessExpiresAt <= now + ACCESS_TOKEN_REFRESH_MARGIN_SEC : null
         await notifyWithingsError(
           env,
           'notify_connection_unavailable',
           'Withings連携情報は保存されていますが、現在利用できないため通知処理を継続できませんでした。',
           [
-            `userId: ${storedConnection?.userId ?? '(unknown)'}`,
-            `accessExpiresAt: ${formatDiscordTimestamp(storedConnection?.accessExpiresAt) ?? '(unknown)'}`,
+            `userId: ${storedConn?.userId ?? '(unknown)'}`,
+            `accessExpiresAt: ${formatDiscordTimestamp(accessExpiresAt) ?? '(unknown)'}`,
+            `lastSyncedAt: ${formatDiscordTimestamp(storedConn?.lastSyncedAt) ?? '(unknown)'}`,
+            `notifyCallbackUrl: ${sanitizeWithingsNotifyCallbackUrl(storedConn?.notifyCallbackUrl) ?? '(unknown)'}`,
+            `refreshDue: ${refreshDue === null ? '(unknown)' : String(refreshDue)}`,
+            'diagnosis: access token refresh failed while processing notify',
           ],
         )
       } else if (result.skipReason === 'payload_user_mismatch') {
@@ -902,11 +945,11 @@ export async function handleWithingsNotify(request: Request, env: Env, ctx?: Exe
 
   if (ctx) {
     ctx.waitUntil(runSync())
-    return jsonResponse({ ok: true, accepted: true })
+    return new Response(null, { status: 200 })
   }
 
   await runSync()
-  return jsonResponse({ ok: true, accepted: true })
+  return new Response(null, { status: 200 })
 }
 
 export async function handleWithingsSync(env: Env, request?: Request) {
