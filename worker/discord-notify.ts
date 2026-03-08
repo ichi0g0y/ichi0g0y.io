@@ -1,6 +1,7 @@
 import { ensureTwitterPostSettings } from './twitter-db'
 import { JST_TIME_ZONE } from './twitter-types'
 import type { Env } from './types'
+import type { WorkoutDetailPoint, WithingsWorkoutForNotification } from './withings-types'
 
 const DISCORD_WEBHOOK_HOSTS = new Set(['discord.com', 'canary.discord.com', 'ptb.discord.com'])
 const DISCORD_CONTENT_MAX_LENGTH = 2000
@@ -110,6 +111,90 @@ export function buildDiscordEnvironmentLines(env: Env) {
   return [
     `deployment: ${environment.label}`,
     environment.origin ? `origin: ${environment.origin}` : null,
+  ]
+}
+
+function formatDiscordNumber(value: number) {
+  return new Intl.NumberFormat('ja-JP', {
+    maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
+  }).format(value)
+}
+
+function formatDiscordDistanceMeters(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null
+  }
+  if (value >= 1000) {
+    return `${formatDiscordNumber(value / 1000)} km`
+  }
+  return `${formatDiscordNumber(value)} m`
+}
+
+function formatDiscordCalories(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null
+  }
+  return `${formatDiscordNumber(value)} kcal`
+}
+
+function formatDiscordDuration(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return null
+  }
+
+  const totalSeconds = Math.trunc(value)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours > 0) {
+    return `${hours}時間${minutes}分`
+  }
+  if (minutes > 0) {
+    return seconds > 0 ? `${minutes}分${seconds}秒` : `${minutes}分`
+  }
+  return `${seconds}秒`
+}
+
+function formatWorkoutDetailValue(detail: WorkoutDetailPoint) {
+  if (detail.key === 'data.distance' || detail.key === 'data.manual_distance') {
+    return formatDiscordDistanceMeters(detail.value)
+  }
+  if (detail.key === 'data.calories' || detail.key === 'data.manual_calories') {
+    return formatDiscordCalories(detail.value)
+  }
+  if (detail.key === 'data.duration') {
+    return formatDiscordDuration(detail.value)
+  }
+  if (typeof detail.value === 'number' && Number.isFinite(detail.value)) {
+    const renderedValue = formatDiscordNumber(detail.value)
+    return detail.unit ? `${renderedValue} ${detail.unit}` : renderedValue
+  }
+  const valueText = detail.valueText?.trim() || ''
+  return valueText || null
+}
+
+export function buildWithingsWorkoutDiscordLines(
+  env: Env,
+  workout: WithingsWorkoutForNotification,
+): Array<string | null | undefined> {
+  const details = workout.details
+    .map((detail) => {
+      const renderedValue = formatWorkoutDetailValue(detail)
+      if (!renderedValue) {
+        return null
+      }
+      return `${detail.labelJa}: ${renderedValue}`
+    })
+    .filter((line): line is string => Boolean(line))
+
+  return [
+    ...buildDiscordEnvironmentLines(env),
+    'event: withings_workout_complete',
+    `category: ${workout.workoutCategoryLabelJa}`,
+    `startedAt: ${formatDiscordTimestamp(workout.startAt ?? workout.measuredAt) ?? '(unknown)'}`,
+    workout.endAt ? `endedAt: ${formatDiscordTimestamp(workout.endAt) ?? '(unknown)'}` : null,
+    workout.dataKey ? `dataKey: ${workout.dataKey}` : null,
+    ...details,
   ]
 }
 

@@ -2,6 +2,7 @@ import type { Env } from './types'
 import { nowSeconds, sha256Hex } from './utils'
 import type { WithingsMeasurementForTweet } from './twitter-types'
 import type {
+  WorkoutDetailPoint,
   WithingsActivityBody,
   WithingsAnswersBody,
   WithingsApiPayload,
@@ -13,6 +14,7 @@ import type {
   WithingsNotifySubscribeResult,
   WithingsSleepBody,
   WithingsTokenBody,
+  WithingsWorkoutForNotification,
 } from './withings-types'
 import {
   ACCESS_TOKEN_REFRESH_MARGIN_SEC,
@@ -33,6 +35,8 @@ import {
   appendWithingsNotifySecret,
   buildStructuredValueEntries,
   calculateBmi,
+  getOrderedWorkoutDetailPaths,
+  getWorkoutDetailMeta,
   getConfiguredHeightM,
   getWithingsCallbackUrl,
   getWithingsNotifyCallbackUrl,
@@ -58,6 +62,11 @@ import {
   toRecords,
 } from './withings-helpers'
 
+type SyncMeasurementsResult = {
+  ok: boolean
+  latestNewWeightMeasurement: WithingsMeasurementForTweet | null
+  latestWorkout: WithingsWorkoutForNotification | null
+}
 
 async function upsertStructuredSourceValues(
   env: Env,
@@ -1013,6 +1022,135 @@ async function syncWorkoutData(
   return { ok: loop < WITHINGS_PAGINATION_MAX_LOOP, connection: activeConnection }
 }
 
+function buildWorkoutDetails(workout: {
+  workoutCategoryKey: string | null
+  durationSec: number | null
+  distanceMeters: number | null
+  caloriesKcal: number | null
+  steps: number | null
+  intensity: number | null
+}) {
+  const detailByPath = new Map<string, WorkoutDetailPoint>()
+  const detailCandidates = [
+    ['data.distance', workout.distanceMeters],
+    ['data.calories', workout.caloriesKcal],
+    ['data.duration', workout.durationSec],
+    ['data.steps', workout.steps],
+    ['data.intensity', workout.intensity],
+  ] as const
+
+  for (const [path, value] of detailCandidates) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      continue
+    }
+    const meta = getWorkoutDetailMeta(path)
+    detailByPath.set(path, {
+      key: path,
+      labelJa: meta.labelJa,
+      labelEn: meta.labelEn,
+      unit: meta.unit,
+      value,
+      valueText: null,
+    })
+  }
+
+  const orderedPaths = getOrderedWorkoutDetailPaths(workout.workoutCategoryKey, [...detailByPath.keys()])
+  return orderedPaths
+    .map((path) => detailByPath.get(path) ?? null)
+    .filter((detail): detail is WorkoutDetailPoint => detail !== null)
+}
+
+async function getLatestWorkoutForWindow(
+  env: Env,
+  userId: string,
+  startDate: number | null,
+  endDate: number | null,
+) {
+  const row = await env.DB.prepare(
+    `
+      SELECT
+        ww.data_key,
+        ww.measured_at,
+        ww.workout_id,
+        ww.category_id,
+        wc.category_key AS category_key,
+        wc.label_ja AS category_label_ja,
+        wc.label_en AS category_label_en,
+        ww.start_at,
+        ww.end_at,
+        ww.date_ymd,
+        ww.timezone,
+        ww.distance_m,
+        ww.calories_kcal,
+        ww.duration_sec,
+        ww.steps,
+        ww.intensity
+      FROM withings_workouts ww
+      LEFT JOIN withings_workout_categories wc
+        ON wc.category_id = ww.category_id
+      WHERE ww.userid = ?1
+        AND (?2 IS NULL OR ww.measured_at >= ?2)
+        AND (?3 IS NULL OR ww.measured_at <= ?3)
+      ORDER BY ww.measured_at DESC, ww.data_key DESC
+      LIMIT 1
+    `,
+  )
+    .bind(userId, startDate, endDate)
+    .first<{
+      data_key: string
+      measured_at: number
+      workout_id: number | null
+      category_id: number | null
+      category_key: string | null
+      category_label_ja: string | null
+      category_label_en: string | null
+      start_at: number | null
+      end_at: number | null
+      date_ymd: string | null
+      timezone: string | null
+      distance_m: number | null
+      calories_kcal: number | null
+      duration_sec: number | null
+      steps: number | null
+      intensity: number | null
+    }>()
+
+  if (!row) {
+    return null
+  }
+
+  const workoutCategoryId = toFiniteInteger(row.category_id)
+  const startAt = toFiniteInteger(row.start_at)
+  const endAt = toFiniteInteger(row.end_at)
+  const detectedDurationSec = toFiniteInteger(row.duration_sec)
+  const durationSec = startAt !== null && endAt !== null && endAt > startAt ? endAt - startAt : detectedDurationSec
+  const fallbackCategoryLabel = workoutCategoryId === null ? '不明' : `Type #${workoutCategoryId}`
+  const fallbackCategoryLabelEn = workoutCategoryId === null ? 'Unknown' : `Type #${workoutCategoryId}`
+  const workout = {
+    dataKey: row.data_key,
+    measuredAt: toFiniteInteger(row.measured_at) ?? 0,
+    workoutId: toFiniteInteger(row.workout_id),
+    workoutCategoryId,
+    workoutCategoryKey: row.category_key,
+    workoutCategoryLabelJa: row.category_label_ja ?? fallbackCategoryLabel,
+    workoutCategoryLabelEn: row.category_label_en ?? fallbackCategoryLabelEn,
+    dateYmd: row.date_ymd,
+    timezone: row.timezone,
+    startAt,
+    endAt,
+    durationSec,
+    distanceMeters: toFiniteNumber(row.distance_m),
+    caloriesKcal: toFiniteNumber(row.calories_kcal),
+    steps: toFiniteInteger(row.steps),
+    intensity: toFiniteInteger(row.intensity),
+  }
+
+  return {
+    ...workout,
+    details: buildWorkoutDetails(workout),
+  } satisfies WithingsWorkoutForNotification
+}
+
 async function syncSleepSummaryData(
   env: Env,
   connection: WithingsConnection,
@@ -1235,16 +1373,17 @@ export async function syncMeasurements(
   connection: WithingsConnection,
   startDate: number | null,
   endDate: number | null,
-) {
+): Promise<SyncMeasurementsResult> {
   const preResolvedEnd = typeof endDate === 'number' && endDate > 0 ? endDate : nowSeconds()
   const fallbackStart = resolveIncrementalSyncStart(connection.lastSyncedAt, preResolvedEnd)
   const window = resolveSyncWindow(startDate, endDate, fallbackStart)
   let activeConnection: WithingsConnection | null = connection
   let latestNewWeightMeasurement: WithingsMeasurementForTweet | null = null
+  let latestWorkout: WithingsWorkoutForNotification | null = null
 
   for (const category of WITHINGS_MEASURE_BASE_CATEGORIES) {
     if (!activeConnection) {
-      return { ok: false, latestNewWeightMeasurement }
+      return { ok: false, latestNewWeightMeasurement, latestWorkout }
     }
     const synced = await syncMeasureGroupsByCategory(
       env,
@@ -1255,11 +1394,11 @@ export async function syncMeasurements(
       category === 1,
     )
     if (!synced.connection) {
-      return { ok: false, latestNewWeightMeasurement }
+      return { ok: false, latestNewWeightMeasurement, latestWorkout }
     }
     activeConnection = synced.connection
     if (!synced.ok) {
-      return { ok: false, latestNewWeightMeasurement }
+      return { ok: false, latestNewWeightMeasurement, latestWorkout }
     }
     if (
       synced.latestNewWeightMeasurement &&
@@ -1278,13 +1417,20 @@ export async function syncMeasurements(
 
   for (const syncFn of optionalSyncFunctions) {
     if (!activeConnection) {
-      return { ok: false, latestNewWeightMeasurement }
+      return { ok: false, latestNewWeightMeasurement, latestWorkout }
     }
     const synced = await syncFn(env, activeConnection, window.startDate, window.endDate)
     if (!synced.connection) {
-      return { ok: false, latestNewWeightMeasurement }
+      return { ok: false, latestNewWeightMeasurement, latestWorkout }
     }
     activeConnection = synced.connection
+    if (!synced.ok) {
+      return { ok: false, latestNewWeightMeasurement, latestWorkout }
+    }
+  }
+
+  if (activeConnection) {
+    latestWorkout = await getLatestWorkoutForWindow(env, activeConnection.userId, window.startDate, window.endDate)
   }
 
   if (activeConnection) {
@@ -1299,5 +1445,5 @@ export async function syncMeasurements(
   }
 
   await markConnectionSyncedAt(env, nowSeconds())
-  return { ok: true, latestNewWeightMeasurement }
+  return { ok: true, latestNewWeightMeasurement, latestWorkout }
 }
