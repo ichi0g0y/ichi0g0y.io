@@ -457,9 +457,7 @@ export function useGear(deps: UseGearDeps) {
     if (!nextUrl) {
       return
     }
-    try {
-      new URL(nextUrl, window.location.origin)
-    } catch {
+    if (!isSupportedHttpUrl(nextUrl)) {
       showToast('画像URLが不正です', 'error')
       return
     }
