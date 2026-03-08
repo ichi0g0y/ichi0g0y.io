@@ -264,6 +264,8 @@ function App() {
     newGearImageUrls,
     setNewGearImageUrls,
     newGearImageCandidates,
+    newGearImageUrlInput,
+    setNewGearImageUrlInput,
     newGearImageFit,
     setNewGearImageFit,
     newGearPrimaryImageUrl,
@@ -341,6 +343,7 @@ function App() {
     handleSubmitRenameCategory,
     handleLoadPreviewForAddDialog,
     handleToggleNewGearImageUrl,
+    handleAddNewGearImageUrl,
     handleCreateGearFromUrl,
     handleRequestDeleteGearItem,
     handleCloseDeleteDialog,
@@ -881,6 +884,7 @@ function App() {
           newGearCategory={newGearCategory}
           newGearImageUrls={newGearImageUrls}
           newGearImageCandidates={newGearImageCandidates}
+          newGearImageUrlInput={newGearImageUrlInput}
           newGearImageFit={newGearImageFit}
           newGearImageUrlSet={newGearImageUrlSet}
           newGearPrimaryImageUrl={newGearPrimaryImageUrl}
@@ -895,10 +899,12 @@ function App() {
           onSetNewGearDescription={setNewGearDescription}
           onSetNewGearCategory={setNewGearCategory}
           onSetNewGearImageUrls={setNewGearImageUrls}
+          onSetNewGearImageUrlInput={setNewGearImageUrlInput}
           onSetNewGearImageFit={setNewGearImageFit}
           onSetAddDialogStep={setAddDialogStep}
           onLoadPreview={handleLoadPreviewForAddDialog}
           onCreateGear={handleCreateGearFromUrl}
+          onAddImageUrl={handleAddNewGearImageUrl}
           onToggleImageUrl={handleToggleNewGearImageUrl}
           onPreviewImageLoad={handlePreviewImageLoad}
           getImageSizeLabel={getImageSizeLabel}
