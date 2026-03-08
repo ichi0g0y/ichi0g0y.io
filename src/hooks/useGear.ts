@@ -29,13 +29,27 @@ function applySequentialSortOrder(items: GearItem[]) {
   return items.map((item, index) => ({ ...item, sortOrder: (index + 1) * 10 }))
 }
 
+function findCategoryInsertIndex(items: GearItem[], category: string) {
+  const targetCategory = category.trim()
+  let insertIndex = items.length
+  for (let index = 0; index < items.length; index += 1) {
+    if (items[index]?.category.trim() === targetCategory) {
+      insertIndex = index + 1
+    }
+  }
+  return insertIndex
+}
+
 function applyUpdatedGearItemCategorySort(items: GearItem[], updatedItem: GearItem) {
   const normalizedUpdatedItem = normalizeGearItem(updatedItem)
   const currentItems = sortGearItemsList(items)
   const existingItem = currentItems.find((item) => item.id === normalizedUpdatedItem.id) ?? null
 
   if (!existingItem) {
-    return applySequentialSortOrder([...currentItems, normalizedUpdatedItem])
+    const insertIndex = findCategoryInsertIndex(currentItems, normalizedUpdatedItem.category)
+    const nextItems = [...currentItems]
+    nextItems.splice(insertIndex, 0, normalizedUpdatedItem)
+    return applySequentialSortOrder(nextItems)
   }
 
   if (existingItem.category.trim() === normalizedUpdatedItem.category.trim()) {
@@ -43,13 +57,7 @@ function applyUpdatedGearItemCategorySort(items: GearItem[], updatedItem: GearIt
   }
 
   const remainingItems = currentItems.filter((item) => item.id !== normalizedUpdatedItem.id)
-  let insertIndex = remainingItems.length
-  for (let index = 0; index < remainingItems.length; index += 1) {
-    if (remainingItems[index]?.category.trim() === normalizedUpdatedItem.category.trim()) {
-      insertIndex = index + 1
-    }
-  }
-
+  const insertIndex = findCategoryInsertIndex(remainingItems, normalizedUpdatedItem.category)
   const nextItems = [...remainingItems]
   nextItems.splice(insertIndex, 0, normalizedUpdatedItem)
   return applySequentialSortOrder(nextItems)
@@ -62,6 +70,15 @@ async function parsePublicApiResponse(response: Response) {
     throw new Error(message)
   }
   return data as Record<string, unknown>
+}
+
+function isSupportedHttpUrl(value: string) {
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
 }
 
 export type UseGearDeps = {
@@ -85,6 +102,7 @@ export function useGear(deps: UseGearDeps) {
   const [newGearCategory, setNewGearCategory] = useState(DEFAULT_NEW_GEAR_CATEGORY)
   const [newGearImageUrls, setNewGearImageUrls] = useState<string[]>([])
   const [newGearImageCandidates, setNewGearImageCandidates] = useState<string[]>([])
+  const [newGearImageUrlInput, setNewGearImageUrlInput] = useState('')
   const [newGearImageFit, setNewGearImageFit] = useState<GearItem['imageFit']>('contain')
   const [addDialogStep, setAddDialogStep] = useState<AddDialogStep>('url')
   const [isFetchingPreview, setIsFetchingPreview] = useState(false)
@@ -271,6 +289,7 @@ export function useGear(deps: UseGearDeps) {
     setNewGearCategory(DEFAULT_NEW_GEAR_CATEGORY)
     setNewGearImageUrls([])
     setNewGearImageCandidates([])
+    setNewGearImageUrlInput('')
     setNewGearImageFit('contain')
     setAddDialogStep('url')
     setIsAddFormOpen(true)
@@ -284,6 +303,7 @@ export function useGear(deps: UseGearDeps) {
     setAddDialogStep('url')
     setNewGearImageUrls([])
     setNewGearImageCandidates([])
+    setNewGearImageUrlInput('')
   }, [isAdding, isFetchingPreview])
 
   const handleOpenRenameCategoryDialog = useCallback((event: ReactMouseEvent<HTMLButtonElement>, category: string) => {
@@ -377,6 +397,10 @@ export function useGear(deps: UseGearDeps) {
         showToast('URLを入力してください', 'error')
         return
       }
+      if (!isSupportedHttpUrl(targetUrl)) {
+        showToast('http/https のURLを入力してください', 'error')
+        return
+      }
 
       setIsFetchingPreview(true)
       try {
@@ -399,11 +423,19 @@ export function useGear(deps: UseGearDeps) {
           new Set([previewImageUrl, ...previewImageCandidates.map((candidate) => candidate.trim())].filter(Boolean)),
         )
         setNewGearImageCandidates(mergedImageCandidates)
+        setNewGearImageUrlInput('')
         setNewGearImageUrls(mergedImageCandidates.length > 0 ? [mergedImageCandidates[0]] : [])
         setAddDialogStep('edit')
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'リンク情報の取得に失敗しました'
-        showToast(message, 'error')
+      } catch {
+        setNewGearUrl(targetUrl)
+        setNewGearTitle('')
+        setNewGearDescription('')
+        setNewGearCategory(DEFAULT_NEW_GEAR_CATEGORY)
+        setNewGearImageCandidates([])
+        setNewGearImageUrlInput('')
+        setNewGearImageUrls([])
+        setAddDialogStep('edit')
+        showToast('リンク情報の取得に失敗したため、手入力モードで続行します。', 'info')
       } finally {
         setIsFetchingPreview(false)
       }
@@ -420,6 +452,22 @@ export function useGear(deps: UseGearDeps) {
     })
   }, [])
 
+  const handleAddNewGearImageUrl = useCallback(() => {
+    const nextUrl = newGearImageUrlInput.trim()
+    if (!nextUrl) {
+      return
+    }
+    try {
+      new URL(nextUrl, window.location.origin)
+    } catch {
+      showToast('画像URLが不正です', 'error')
+      return
+    }
+    setNewGearImageCandidates((previous) => (previous.includes(nextUrl) ? previous : [...previous, nextUrl]))
+    setNewGearImageUrls((previous) => (previous.includes(nextUrl) ? previous : [...previous, nextUrl]))
+    setNewGearImageUrlInput('')
+  }, [newGearImageUrlInput, showToast])
+
   const handleCreateGearFromUrl = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault()
@@ -433,6 +481,7 @@ export function useGear(deps: UseGearDeps) {
       setIsAdding(true)
 
       try {
+        const previousItems = gearItems
         const data = await requestWithAuth('/api/admin/gear-items/from-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -450,15 +499,40 @@ export function useGear(deps: UseGearDeps) {
           throw new Error('カード化に失敗しました')
         }
         const normalizedInsertedItem = normalizeGearItem(insertedItem)
-        setGearItems((previous) =>
-          sortGearItemsList([...previous.filter((entry) => entry.id !== normalizedInsertedItem.id), normalizedInsertedItem]),
-        )
+        const fallbackItems = sortGearItemsList([
+          ...previousItems.filter((entry) => entry.id !== normalizedInsertedItem.id),
+          normalizedInsertedItem,
+        ])
+        const nextItems = applyUpdatedGearItemCategorySort(previousItems, normalizedInsertedItem)
+        const fallbackOrderedIds = fallbackItems.map((item) => item.id)
+        const nextOrderedIds = nextItems.map((item) => item.id)
+        const shouldPersistReorder =
+          fallbackOrderedIds.length === nextOrderedIds.length &&
+          fallbackOrderedIds.some((id, index) => id !== nextOrderedIds[index])
+
+        if (shouldPersistReorder) {
+          try {
+            await requestWithAuth('/api/admin/gear-items/reorder', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ orderedIds: nextOrderedIds }),
+            })
+          } catch (error) {
+            setGearItems(fallbackItems)
+            const message = error instanceof Error ? error.message : '並び順の保存に失敗しました'
+            showToast(`カードは追加しましたが、${message}`, 'error')
+            return
+          }
+        }
+
+        setGearItems(nextItems)
         setNewGearUrl('')
         setNewGearTitle('')
         setNewGearDescription('')
         setNewGearCategory(DEFAULT_NEW_GEAR_CATEGORY)
         setNewGearImageUrls([])
         setNewGearImageCandidates([])
+        setNewGearImageUrlInput('')
         setNewGearImageFit('contain')
         setAddDialogStep('url')
         setIsAddFormOpen(false)
@@ -471,6 +545,7 @@ export function useGear(deps: UseGearDeps) {
       }
     },
     [
+      gearItems,
       newGearCategory,
       newGearDescription,
       newGearImageUrls,
@@ -1177,6 +1252,7 @@ export function useGear(deps: UseGearDeps) {
     setAddDialogStep('url')
     setNewGearImageUrls([])
     setNewGearImageCandidates([])
+    setNewGearImageUrlInput('')
     setDeleteConfirmTarget(null)
     setEditingGearId(null)
     setEditTitle('')
@@ -1217,6 +1293,7 @@ export function useGear(deps: UseGearDeps) {
     setNewGearCategory(DEFAULT_NEW_GEAR_CATEGORY)
     setNewGearImageUrls([])
     setNewGearImageCandidates([])
+    setNewGearImageUrlInput('')
     setNewGearImageFit('contain')
     setAddDialogStep('url')
     setIsFetchingPreview(false)
@@ -1276,6 +1353,8 @@ export function useGear(deps: UseGearDeps) {
     newGearImageUrls,
     setNewGearImageUrls,
     newGearImageCandidates,
+    newGearImageUrlInput,
+    setNewGearImageUrlInput,
     newGearImageFit,
     setNewGearImageFit,
     newGearPrimaryImageUrl,
@@ -1355,6 +1434,7 @@ export function useGear(deps: UseGearDeps) {
     handleSubmitRenameCategory,
     handleLoadPreviewForAddDialog,
     handleToggleNewGearImageUrl,
+    handleAddNewGearImageUrl,
     handleCreateGearFromUrl,
     handleRequestDeleteGearItem,
     handleCloseDeleteDialog,

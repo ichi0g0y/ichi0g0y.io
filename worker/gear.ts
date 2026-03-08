@@ -18,6 +18,16 @@ function mapGearRowForResponse(row: GearRow, env: Env, requestUrl: URL) {
   }
 }
 
+function createFallbackPreview(inputUrl: string): LinkPreview {
+  return {
+    url: inputUrl,
+    title: null,
+    description: null,
+    imageUrl: null,
+    imageCandidates: [],
+  }
+}
+
 export async function handleListGearItems(request: Request, env: Env) {
   await ensureGearItemsSchema(env)
   const rows = await env.DB.prepare(
@@ -208,25 +218,39 @@ export async function handleCreateGearFromUrl(request: Request, env: Env) {
     return errorResponse('URLを入力してください', 400)
   }
 
-  let preview: LinkPreview
+  let targetUrl: URL
   try {
-    preview = await fetchLinkPreview(inputUrl)
+    targetUrl = new URL(inputUrl)
+  } catch {
+    return errorResponse('URLが不正です', 400)
+  }
+
+  if (!['http:', 'https:'].includes(targetUrl.protocol)) {
+    return errorResponse('http/https のURLのみ対応しています', 400)
+  }
+
+  let preview = createFallbackPreview(targetUrl.toString())
+  try {
+    preview = await fetchLinkPreview(targetUrl.toString())
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'リンク情報の取得に失敗しました'
-    return errorResponse(message, 400)
+    console.warn('リンク情報の取得に失敗したため手入力フォールバックを使用します', {
+      inputUrl: targetUrl.toString(),
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
 
   const requestedCategory = body?.category?.trim()
   const requestedTitle = body?.title?.trim()
   const requestedDescriptionRaw = body?.description
   const requestedDescription = typeof requestedDescriptionRaw === 'string' ? requestedDescriptionRaw.trim() : null
-  const requestedImages = resolveRequestedImageUrls(body?.imageUrls, body?.imageUrl, new URL(preview.url))
+  const previewUrl = preview.url || targetUrl.toString()
+  const requestedImages = resolveRequestedImageUrls(body?.imageUrls, body?.imageUrl, new URL(previewUrl))
   if (!requestedImages.ok) {
     return errorResponse(requestedImages.error, 400)
   }
   const requestedImageFit = body?.imageFit === undefined ? null : normalizeImageFit(body.imageFit)
   const category = requestedCategory || '外部リンク'
-  const title = requestedTitle || preview.title || new URL(preview.url).hostname
+  const title = requestedTitle || preview.title || targetUrl.hostname
   const description = requestedDescription || preview.description
   const canTranslate = Boolean(env.OPENAI_API_KEY?.trim())
   const previewImageUrls = normalizeImageUrls(preview.imageCandidates.length > 0 ? preview.imageCandidates : [preview.imageUrl ?? ''])
@@ -244,7 +268,7 @@ export async function handleCreateGearFromUrl(request: Request, env: Env) {
       LIMIT 1
     `,
   )
-    .bind(inputUrl, preview.url)
+    .bind(targetUrl.toString(), previewUrl)
     .first<GearRow>()
 
   if (existing) {
@@ -252,14 +276,14 @@ export async function handleCreateGearFromUrl(request: Request, env: Env) {
     return updateExistingGearItem(
       env,
       existing,
-      { title, category: nextCategory, description, imageUrl, imageUrls, imageFit: requestedImageFit, previewUrl: preview.url, canTranslate },
+      { title, category: nextCategory, description, imageUrl, imageUrls, imageFit: requestedImageFit, previewUrl, canTranslate },
       preview,
     )
   }
 
   return insertNewGearItem(
     env,
-    { title, category, description, imageUrl, imageUrls, imageFit, previewUrl: preview.url, canTranslate },
+    { title, category, description, imageUrl, imageUrls, imageFit, previewUrl, canTranslate },
     preview,
   )
 }

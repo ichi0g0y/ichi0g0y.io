@@ -13,6 +13,7 @@ export type AddGearDialogProps = {
   newGearCategory: string
   newGearImageUrls: string[]
   newGearImageCandidates: string[]
+  newGearImageUrlInput: string
   newGearImageFit: GearItem['imageFit']
   newGearImageUrlSet: Set<string>
   newGearPrimaryImageUrl: string | null
@@ -27,10 +28,12 @@ export type AddGearDialogProps = {
   onSetNewGearDescription: (value: string) => void
   onSetNewGearCategory: (value: string) => void
   onSetNewGearImageUrls: (value: string[]) => void
+  onSetNewGearImageUrlInput: (value: string) => void
   onSetNewGearImageFit: (value: GearItem['imageFit']) => void
   onSetAddDialogStep: (value: AddDialogStep) => void
   onLoadPreview: (event: FormEvent<HTMLFormElement>) => void
   onCreateGear: (event: FormEvent<HTMLFormElement>) => void
+  onAddImageUrl: () => void
   onToggleImageUrl: (url: string) => void
   onPreviewImageLoad: (event: SyntheticEvent<HTMLImageElement>) => void
   getImageSizeLabel: (url: string) => string
@@ -44,6 +47,7 @@ export function AddGearDialog({
   newGearCategory,
   newGearImageUrls,
   newGearImageCandidates,
+  newGearImageUrlInput,
   newGearImageFit,
   newGearImageUrlSet,
   newGearPrimaryImageUrl,
@@ -57,10 +61,12 @@ export function AddGearDialog({
   onSetNewGearDescription,
   onSetNewGearCategory,
   onSetNewGearImageUrls,
+  onSetNewGearImageUrlInput,
   onSetNewGearImageFit,
   onSetAddDialogStep,
   onLoadPreview,
   onCreateGear,
+  onAddImageUrl,
   onToggleImageUrl,
   onPreviewImageLoad,
   getImageSizeLabel,
@@ -202,6 +208,24 @@ export function AddGearDialog({
                 })}
               </div>
             ) : null}
+            <div className="edit-image-controls">
+              <input
+                className="admin-input"
+                type="url"
+                value={newGearImageUrlInput}
+                onChange={(event) => onSetNewGearImageUrlInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    onAddImageUrl()
+                  }
+                }}
+                placeholder="画像URLを直接追加（https://...）"
+              />
+              <button className="admin-button ghost" type="button" onClick={onAddImageUrl} disabled={isAdding}>
+                画像を追加
+              </button>
+            </div>
             <button
               className={`image-candidate-none${newGearImageUrls.length < 1 ? ' is-selected' : ''}`}
               type="button"
