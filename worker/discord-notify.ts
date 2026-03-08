@@ -55,6 +55,64 @@ export function formatDiscordTimestamp(epochSec: number | null | undefined) {
   }).format(new Date(epochSec * 1000))
 }
 
+function resolveDiscordEnvironmentOrigin(env: Env) {
+  const candidates = [env.WITHINGS_PUBLIC_ORIGIN, env.APP_ORIGIN]
+  for (const candidate of candidates) {
+    const value = candidate?.trim() || ''
+    if (value) {
+      return value
+    }
+  }
+  return null
+}
+
+export function resolveDiscordEnvironment(env: Env) {
+  const origin = resolveDiscordEnvironmentOrigin(env)
+  if (!origin) {
+    return {
+      label: 'unknown',
+      origin: null,
+    } as const
+  }
+
+  let hostname = ''
+  try {
+    hostname = new URL(origin).hostname
+  } catch {
+    return {
+      label: 'unknown',
+      origin,
+    } as const
+  }
+
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return {
+      label: 'local',
+      origin,
+    } as const
+  }
+
+  if (hostname.endsWith('.workers.dev')) {
+    return {
+      label: 'remote',
+      origin,
+    } as const
+  }
+
+  return {
+    label: 'production',
+    origin,
+  } as const
+}
+
+export function buildDiscordEnvironmentLines(env: Env) {
+  const environment = resolveDiscordEnvironment(env)
+  return [
+    `deployment: ${environment.label}`,
+    environment.origin ? `origin: ${environment.origin}` : null,
+  ]
+}
+
 export async function sendDiscordMessage(webhookUrl: string, title: string, lines: Array<string | null | undefined>) {
   const response = await fetch(webhookUrl, {
     method: 'POST',
