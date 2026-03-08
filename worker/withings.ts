@@ -1,10 +1,15 @@
 import type { Env } from './types'
 import { errorResponse, jsonResponse, nowSeconds, parseCookies } from './utils'
-import { buildDiscordEnvironmentLines, formatDiscordTimestamp, notifyDiscord } from './discord-notify'
+import {
+  buildDiscordEnvironmentLines,
+  buildWithingsWorkoutDiscordLines,
+  formatDiscordTimestamp,
+  notifyDiscord,
+} from './discord-notify'
 import { postLatestWithingsMeasurementTweet } from './twitter-post'
 import type { PostLatestWithingsMeasurementTweetResult } from './twitter-post'
 import type { WithingsMeasurementForTweet } from './twitter-types'
-import type { WithingsNotificationPayload } from './withings-types'
+import type { WithingsNotificationPayload, WithingsWorkoutForNotification } from './withings-types'
 import {
   ACCESS_TOKEN_REFRESH_MARGIN_SEC,
   WITHINGS_NOTIFY_APPLI_ACTIVITY,
@@ -71,6 +76,10 @@ async function notifyAutoTweetSuccess(
     `measuredAt: ${formatDiscordTimestamp(result.latestNewWeightMeasurement?.measuredAt) ?? '(unknown)'}`,
     `postedAt: ${formatDiscordTimestamp(nowSeconds()) ?? '(unknown)'}`,
   ])
+}
+
+async function notifyWorkoutSuccess(env: Env, workout: WithingsWorkoutForNotification) {
+  await notifyDiscord(env, 'ワークアウト完了', buildWithingsWorkoutDiscordLines(env, workout))
 }
 
 async function parseNotifyPayload(request: Request): Promise<WithingsNotificationPayload> {
@@ -163,6 +172,7 @@ type WithingsNotifyProcessResult = {
   payloadUserMatched: boolean
   syncOk: boolean
   latestNewWeightMeasurement: WithingsMeasurementForTweet | null
+  latestWorkout: WithingsWorkoutForNotification | null
   tweetAttempted: boolean
   tweetPosted: boolean
   tweetResult: PostLatestWithingsMeasurementTweetResult | null
@@ -197,6 +207,7 @@ function buildNotifyResult(
     payloadUserMatched: false,
     syncOk: false,
     latestNewWeightMeasurement: null,
+    latestWorkout: null,
     tweetAttempted: false,
     tweetPosted: false,
     tweetResult: null,
@@ -347,6 +358,7 @@ async function processWithingsNotify(
     return buildNotifyResult(options.authMode, {
       payloadUserMatched: true,
       latestNewWeightMeasurement: synced.latestNewWeightMeasurement,
+      latestWorkout: synced.latestWorkout,
       skipReason: 'sync_failed',
       subscriptionRepair,
     })
@@ -358,6 +370,7 @@ async function processWithingsNotify(
       payloadUserMatched: true,
       syncOk: true,
       latestNewWeightMeasurement: synced.latestNewWeightMeasurement,
+      latestWorkout: synced.latestWorkout,
       skipReason: 'non_measure_notify',
       subscriptionRepair,
     })
@@ -379,6 +392,7 @@ async function processWithingsNotify(
       payloadUserMatched: true,
       syncOk: true,
       latestNewWeightMeasurement: synced.latestNewWeightMeasurement,
+      latestWorkout: synced.latestWorkout,
       skipReason: 'dry_run',
       subscriptionRepair,
     })
@@ -397,6 +411,7 @@ async function processWithingsNotify(
     payloadUserMatched: true,
     syncOk: true,
     latestNewWeightMeasurement: synced.latestNewWeightMeasurement,
+    latestWorkout: synced.latestWorkout,
     tweetAttempted: true,
     tweetPosted: tweetResult.ok,
     tweetResult,
@@ -421,7 +436,9 @@ function buildSimulatedNotifyMessage(result: WithingsNotifyProcessResult) {
     return '擬似Notifyを実行しました。新しい体重計測を検出しましたが、X投稿は dry-run で抑止しました。'
   }
   if (result.skipReason === 'non_measure_notify') {
-    return '擬似Notifyを実行しました。体重系通知ではないため、X投稿は対象外です。'
+    return result.latestWorkout
+      ? '擬似Notifyを実行しました。ワークアウト通知を検出したため、Discord通知対象のワークアウト詳細を同期しました。'
+      : '擬似Notifyを実行しました。ワークアウト通知でしたが、通知対象のワークアウトは見つかりませんでした。'
   }
   return '擬似Notifyを実行しました。X投稿は抑止しています。'
 }
@@ -773,7 +790,7 @@ export async function handleWithingsAuthCallback(request: Request, env: Env, ctx
           '[withings] initial sync threw exception',
           error instanceof Error ? error.stack ?? error.message : String(error),
         )
-        return { ok: false, latestNewWeightMeasurement: null }
+        return { ok: false, latestNewWeightMeasurement: null, latestWorkout: null }
       }
     }
     if (ctx) {
@@ -875,6 +892,13 @@ export async function handleWithingsNotify(request: Request, env: Env, ctx?: Exe
               measuredAt: result.latestNewWeightMeasurement.measuredAt,
             }
           : null,
+        latestWorkout: result.latestWorkout
+          ? {
+              dataKey: result.latestWorkout.dataKey,
+              measuredAt: result.latestWorkout.measuredAt,
+              category: result.latestWorkout.workoutCategoryKey ?? result.latestWorkout.workoutCategoryLabelJa,
+            }
+          : null,
         tweetPosted: result.tweetPosted,
         tweetReason: result.tweetResult?.ok ? null : result.tweetResult?.reason ?? result.skipReason,
         subscriptionRepair: {
@@ -924,6 +948,8 @@ export async function handleWithingsNotify(request: Request, env: Env, ctx?: Exe
         await notifyWithingsError(env, 'notify_payload_user_mismatch', 'Withings通知のユーザーIDが保存済みユーザーと一致しません。')
       } else if (result.skipReason === 'sync_failed') {
         await notifyWithingsError(env, 'notify_sync_failed', 'Withings通知受信後の同期に失敗しました。')
+      } else if (result.skipReason === 'non_measure_notify' && result.latestWorkout) {
+        await notifyWorkoutSuccess(env, result.latestWorkout)
       } else if (result.tweetAttempted && result.tweetResult && !result.tweetResult.ok) {
         await notifyWithingsError(env, 'notify_auto_post_failed', 'Withings通知でのX自動投稿に失敗しました。', [
           `reason: ${result.tweetResult.reason}`,
@@ -1171,6 +1197,7 @@ export async function handleWithingsNotifySimulation(request: Request, env: Env)
     ])
     return errorResponse(buildSimulatedNotifyMessage(result), 502, {
       syncOk: result.syncOk,
+      latestWorkout: result.latestWorkout,
       skipReason: result.skipReason,
       subscriptionRepair: result.subscriptionRepair,
     })
@@ -1181,6 +1208,7 @@ export async function handleWithingsNotifySimulation(request: Request, env: Env)
     dryRun: true,
     message: buildSimulatedNotifyMessage(result),
     latestNewWeightMeasurement: result.latestNewWeightMeasurement,
+    latestWorkout: result.latestWorkout,
     skipReason: result.skipReason,
     subscriptionRepair: result.subscriptionRepair,
   })

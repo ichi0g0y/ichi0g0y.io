@@ -168,6 +168,26 @@ export type WorkoutDetailPoint = {
   valueText: string | null
 }
 
+export type WithingsWorkoutForNotification = {
+  dataKey: string
+  measuredAt: number
+  workoutId: number | null
+  workoutCategoryId: number | null
+  workoutCategoryKey: string | null
+  workoutCategoryLabelJa: string
+  workoutCategoryLabelEn: string
+  dateYmd: string | null
+  timezone: string | null
+  startAt: number | null
+  endAt: number | null
+  durationSec: number | null
+  distanceMeters: number | null
+  caloriesKcal: number | null
+  steps: number | null
+  intensity: number | null
+  details: WorkoutDetailPoint[]
+}
+
 export const WORKOUT_DETAIL_META_BY_PATH: Record<string, WorkoutDetailMeta> = {
   'data.distance': { labelJa: '距離', labelEn: 'Distance', unit: 'm' },
   'data.manual_distance': { labelJa: '距離', labelEn: 'Distance', unit: 'm' },
