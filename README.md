@@ -60,7 +60,7 @@ Withings等の外部Webhook連携を試す場合は remote 開発を使ってく
 task dev:remote
 ```
 
-`task dev:remote` は tmux セッション `ichi0g0y-io` を使います。
+`task dev:remote` は zellij セッション `ichi0g0y-io` を使います。
 既存セッションがあれば一度 kill し、2ペイン（左: Worker remote / 右: Web）で再作成してアタッチします。
 起動時に remote 公開URL（`WITHINGS_PUBLIC_ORIGIN`）と `http://localhost:8787` を表示します。
 
