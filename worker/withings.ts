@@ -2,14 +2,13 @@ import type { Env } from './types'
 import { errorResponse, jsonResponse, nowSeconds, parseCookies } from './utils'
 import {
   buildDiscordEnvironmentLines,
-  buildWithingsWorkoutDiscordLines,
   formatDiscordTimestamp,
   notifyDiscord,
 } from './discord-notify'
 import { postLatestWithingsMeasurementTweet } from './twitter-post'
 import type { PostLatestWithingsMeasurementTweetResult } from './twitter-post'
 import type { WithingsMeasurementForTweet } from './twitter-types'
-import type { WithingsNotificationPayload, WithingsWorkoutForNotification } from './withings-types'
+import type { WithingsNotificationPayload } from './withings-types'
 import {
   ACCESS_TOKEN_REFRESH_MARGIN_SEC,
   WITHINGS_NOTIFY_APPLI_ACTIVITY,
@@ -61,25 +60,6 @@ async function notifyWithingsError(
     `message: ${message}`,
     ...details,
   ])
-}
-
-async function notifyAutoTweetSuccess(
-  env: Env,
-  result: WithingsNotifyProcessResult,
-  mode: 'with_image' | 'text_only',
-  tweetId: string | null,
-) {
-  await notifyDiscord(env, 'X投稿成功', [
-    'event: auto_withings_post',
-    `tweetId: ${tweetId ?? '(unknown)'}`,
-    `mode: ${mode}`,
-    `measuredAt: ${formatDiscordTimestamp(result.latestNewWeightMeasurement?.measuredAt) ?? '(unknown)'}`,
-    `postedAt: ${formatDiscordTimestamp(nowSeconds()) ?? '(unknown)'}`,
-  ])
-}
-
-async function notifyWorkoutSuccess(env: Env, workout: WithingsWorkoutForNotification) {
-  await notifyDiscord(env, 'ワークアウト完了', buildWithingsWorkoutDiscordLines(env, workout))
 }
 
 async function parseNotifyPayload(request: Request): Promise<WithingsNotificationPayload> {
@@ -948,15 +928,11 @@ export async function handleWithingsNotify(request: Request, env: Env, ctx?: Exe
         await notifyWithingsError(env, 'notify_payload_user_mismatch', 'Withings通知のユーザーIDが保存済みユーザーと一致しません。')
       } else if (result.skipReason === 'sync_failed') {
         await notifyWithingsError(env, 'notify_sync_failed', 'Withings通知受信後の同期に失敗しました。')
-      } else if (result.skipReason === 'non_measure_notify' && result.latestWorkout) {
-        await notifyWorkoutSuccess(env, result.latestWorkout)
       } else if (result.tweetAttempted && result.tweetResult && !result.tweetResult.ok) {
         await notifyWithingsError(env, 'notify_auto_post_failed', 'Withings通知でのX自動投稿に失敗しました。', [
           `reason: ${result.tweetResult.reason}`,
           `measuredAt: ${formatDiscordTimestamp(result.latestNewWeightMeasurement?.measuredAt) ?? '(unknown)'}`,
         ])
-      } else if (result.tweetPosted && result.tweetResult && result.tweetResult.ok) {
-        await notifyAutoTweetSuccess(env, result, result.tweetResult.mode, result.tweetResult.tweetId)
       }
     } catch (error) {
       await notifyWithingsError(env, 'notify_exception', 'Withings通知処理で例外が発生しました。', [
