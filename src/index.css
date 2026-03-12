@@ -3,9 +3,11 @@
 
 @import './styles/base.css';
 @import './styles/hero.css';
+@import './styles/withings.css';
 @import './styles/gear.css';
 @import './styles/gear-cards.css';
 @import './styles/admin.css';
 @import './styles/dialogs.css';
 @import './styles/widgets.css';
 @import './styles/responsive.css';
+@import './styles/theme.css';

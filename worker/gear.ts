@@ -6,8 +6,29 @@ import { fetchLinkPreview, resolveRequestedImageUrls, normalizeImageUrls } from 
 import type { LinkPreview } from './gear-preview'
 import { mapGearRow, normalizeImageFit, parseStoredImageUrls } from './gear-map'
 import type { GearRow } from './gear-map'
+import { backupImageUrls, normalizeManagedImageUrlsForResponse } from './image-store'
 
-export async function handleListGearItems(env: Env) {
+function mapGearRowForResponse(row: GearRow, env: Env, requestUrl: URL) {
+  const item = mapGearRow(row)
+  const imageUrls = normalizeManagedImageUrlsForResponse(env, requestUrl, item.imageUrls)
+  return {
+    ...item,
+    imageUrl: imageUrls[0] ?? null,
+    imageUrls,
+  }
+}
+
+function createFallbackPreview(inputUrl: string): LinkPreview {
+  return {
+    url: inputUrl,
+    title: null,
+    description: null,
+    imageUrl: null,
+    imageCandidates: [],
+  }
+}
+
+export async function handleListGearItems(request: Request, env: Env) {
   await ensureGearItemsSchema(env)
   const rows = await env.DB.prepare(
     `
@@ -17,7 +38,8 @@ export async function handleListGearItems(env: Env) {
     `,
   ).all<GearRow>()
 
-  const items = (rows.results ?? []).map(mapGearRow)
+  const requestUrl = new URL(request.url)
+  const items = (rows.results ?? []).map((row) => mapGearRowForResponse(row, env, requestUrl))
   return jsonResponse({ ok: true, items })
 }
 
@@ -35,6 +57,42 @@ export async function handlePreview(request: Request) {
     const message = error instanceof Error ? error.message : 'URLプレビュー取得に失敗しました'
     return errorResponse(message, 400)
   }
+}
+
+export async function handleTranslateGearDescription(request: Request, env: Env) {
+  const body = await readJsonBody<{
+    title?: string
+    category?: string
+    description?: string
+  }>(request)
+  const title = typeof body?.title === 'string' ? body.title.trim() : ''
+  const category = typeof body?.category === 'string' ? body.category.trim() : ''
+  const description = typeof body?.description === 'string' ? body.description.trim() : ''
+
+  if (!description) {
+    return errorResponse('翻訳対象の日本語説明を入力してください', 400)
+  }
+
+  if (!env.OPENAI_API_KEY?.trim()) {
+    return errorResponse('翻訳機能が未設定です（OPENAI_API_KEY が必要です）', 400)
+  }
+
+  const translated = await translateToEnglishWithOpenAI(
+    {
+      title: title || 'Untitled',
+      category: category || 'Other',
+      description,
+    },
+    env,
+  )
+  if (!translated.descriptionEn) {
+    return errorResponse('英語説明の生成に失敗しました', 502)
+  }
+
+  return jsonResponse({
+    ok: true,
+    descriptionEn: translated.descriptionEn,
+  })
 }
 
 async function updateExistingGearItem(
@@ -86,7 +144,7 @@ async function updateExistingGearItem(
     return errorResponse('カード更新に失敗しました', 500)
   }
 
-  return jsonResponse({ ok: true, item: mapGearRow(updated), preview })
+  return jsonResponse({ ok: true, item: mapGearRowForResponse(updated, env, new URL(preview.url)), preview })
 }
 
 async function insertNewGearItem(
@@ -140,7 +198,7 @@ async function insertNewGearItem(
     return errorResponse('カード作成に失敗しました', 500)
   }
 
-  return jsonResponse({ ok: true, item: mapGearRow(inserted), preview })
+  return jsonResponse({ ok: true, item: mapGearRowForResponse(inserted, env, new URL(preview.url)), preview })
 }
 
 export async function handleCreateGearFromUrl(request: Request, env: Env) {
@@ -160,29 +218,44 @@ export async function handleCreateGearFromUrl(request: Request, env: Env) {
     return errorResponse('URLを入力してください', 400)
   }
 
-  let preview: LinkPreview
+  let targetUrl: URL
   try {
-    preview = await fetchLinkPreview(inputUrl)
+    targetUrl = new URL(inputUrl)
+  } catch {
+    return errorResponse('URLが不正です', 400)
+  }
+
+  if (!['http:', 'https:'].includes(targetUrl.protocol)) {
+    return errorResponse('http/https のURLのみ対応しています', 400)
+  }
+
+  let preview = createFallbackPreview(targetUrl.toString())
+  try {
+    preview = await fetchLinkPreview(targetUrl.toString())
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'リンク情報の取得に失敗しました'
-    return errorResponse(message, 400)
+    console.warn('リンク情報の取得に失敗したため手入力フォールバックを使用します', {
+      inputUrl: targetUrl.toString(),
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
 
   const requestedCategory = body?.category?.trim()
   const requestedTitle = body?.title?.trim()
   const requestedDescriptionRaw = body?.description
   const requestedDescription = typeof requestedDescriptionRaw === 'string' ? requestedDescriptionRaw.trim() : null
-  const requestedImages = resolveRequestedImageUrls(body?.imageUrls, body?.imageUrl, new URL(preview.url))
+  const previewUrl = preview.url || targetUrl.toString()
+  const requestedImages = resolveRequestedImageUrls(body?.imageUrls, body?.imageUrl, new URL(previewUrl))
   if (!requestedImages.ok) {
     return errorResponse(requestedImages.error, 400)
   }
   const requestedImageFit = body?.imageFit === undefined ? null : normalizeImageFit(body.imageFit)
   const category = requestedCategory || '外部リンク'
-  const title = requestedTitle || preview.title || new URL(preview.url).hostname
+  const title = requestedTitle || preview.title || targetUrl.hostname
   const description = requestedDescription || preview.description
   const canTranslate = Boolean(env.OPENAI_API_KEY?.trim())
   const previewImageUrls = normalizeImageUrls(preview.imageCandidates.length > 0 ? preview.imageCandidates : [preview.imageUrl ?? ''])
-  const imageUrls = requestedImages.imageUrls ?? previewImageUrls
+  let imageUrls = requestedImages.imageUrls ?? previewImageUrls
+  imageUrls = await backupImageUrls(env, request, imageUrls)
   const imageUrl = imageUrls[0] ?? null
   const imageFit = requestedImageFit ?? 'contain'
 
@@ -195,7 +268,7 @@ export async function handleCreateGearFromUrl(request: Request, env: Env) {
       LIMIT 1
     `,
   )
-    .bind(inputUrl, preview.url)
+    .bind(targetUrl.toString(), previewUrl)
     .first<GearRow>()
 
   if (existing) {
@@ -203,14 +276,14 @@ export async function handleCreateGearFromUrl(request: Request, env: Env) {
     return updateExistingGearItem(
       env,
       existing,
-      { title, category: nextCategory, description, imageUrl, imageUrls, imageFit: requestedImageFit, previewUrl: preview.url, canTranslate },
+      { title, category: nextCategory, description, imageUrl, imageUrls, imageFit: requestedImageFit, previewUrl, canTranslate },
       preview,
     )
   }
 
   return insertNewGearItem(
     env,
-    { title, category, description, imageUrl, imageUrls, imageFit, previewUrl: preview.url, canTranslate },
+    { title, category, description, imageUrl, imageUrls, imageFit, previewUrl, canTranslate },
     preview,
   )
 }
@@ -226,8 +299,11 @@ export async function handleUpdateGearItem(request: Request, env: Env) {
 
   const body = await readJsonBody<{
     title?: string
+    titleEn?: string
     description?: string
+    descriptionEn?: string
     category?: string
+    categoryEn?: string
     imageUrls?: unknown
     imageUrl?: unknown
     imageFit?: unknown
@@ -247,15 +323,33 @@ export async function handleUpdateGearItem(request: Request, env: Env) {
     return errorResponse('対象のカードが見つかりません', 404)
   }
 
-  const nextTitle = typeof body?.title === 'string' ? body.title.trim() : existing.title
-  if (!nextTitle) {
+  const titleInput = typeof body?.title === 'string' ? body.title : null
+  const titleEnInput = typeof body?.titleEn === 'string' ? body.titleEn : null
+  const categoryInput = typeof body?.category === 'string' ? body.category : null
+  const categoryEnInput = typeof body?.categoryEn === 'string' ? body.categoryEn : null
+  const descriptionInput = typeof body?.description === 'string' ? body.description : null
+  const descriptionEnInput = typeof body?.descriptionEn === 'string' ? body.descriptionEn : null
+
+  const hasTitle = titleInput != null
+  const hasTitleEn = titleEnInput != null
+  const hasCategory = categoryInput != null
+  const hasCategoryEn = categoryEnInput != null
+  const hasDescription = descriptionInput != null
+  const hasDescriptionEn = descriptionEnInput != null
+
+  const nextTitle = hasTitle ? titleInput.trim() : existing.title
+  if (hasTitle && !nextTitle) {
     return errorResponse('タイトルを入力してください', 400)
   }
+  const nextTitleEnRaw = hasTitleEn ? titleEnInput.trim() : existing.title_en
+  const nextTitleEn = nextTitleEnRaw || null
 
-  const nextCategoryRaw = typeof body?.category === 'string' ? body.category.trim() : existing.category
+  const nextCategoryRaw = hasCategory ? categoryInput.trim() : existing.category
   const nextCategory = nextCategoryRaw || existing.category
-  const nextDescription =
-    typeof body?.description === 'string' ? (body.description.trim() || null) : existing.description
+  const nextCategoryEnRaw = hasCategoryEn ? categoryEnInput.trim() : existing.category_en
+  const nextCategoryEn = nextCategoryEnRaw || null
+  const nextDescription = hasDescription ? descriptionInput.trim() || null : existing.description
+  const nextDescriptionEn = hasDescriptionEn ? descriptionEnInput.trim() || null : existing.description_en
   let imageBaseUrl = new URL(request.url)
   if (existing.link_url) {
     try {
@@ -268,10 +362,12 @@ export async function handleUpdateGearItem(request: Request, env: Env) {
   if (!resolvedImageUrls.ok) {
     return errorResponse(resolvedImageUrls.error, 400)
   }
-  const nextImageUrls = resolvedImageUrls.imageUrls ?? parseStoredImageUrls(existing.image_urls, existing.image_url)
+  const nextImageUrlsRaw = resolvedImageUrls.imageUrls ?? parseStoredImageUrls(existing.image_urls, existing.image_url)
+  const shouldBackupImages = body?.imageUrls !== undefined || body?.imageUrl !== undefined
+  const nextImageUrls = shouldBackupImages ? await backupImageUrls(env, request, nextImageUrlsRaw) : nextImageUrlsRaw
   const nextImageUrl = nextImageUrls[0] ?? null
   const nextImageFit = body?.imageFit === undefined ? existing.image_fit : normalizeImageFit(body.imageFit)
-  const canTranslate = Boolean(env.OPENAI_API_KEY?.trim())
+  const canTranslate = Boolean(env.OPENAI_API_KEY?.trim()) && (hasTitle || hasCategory || hasDescription)
   const translated = canTranslate
     ? await translateToEnglishWithOpenAI(
         {
@@ -294,11 +390,11 @@ export async function handleUpdateGearItem(request: Request, env: Env) {
   )
     .bind(
       nextTitle,
-      translated?.titleEn ?? existing.title_en,
+      hasTitleEn ? nextTitleEn : translated?.titleEn ?? existing.title_en,
       nextCategory,
-      translated?.categoryEn ?? existing.category_en,
+      hasCategoryEn ? nextCategoryEn : translated?.categoryEn ?? existing.category_en,
       nextDescription,
-      translated?.descriptionEn ?? existing.description_en,
+      hasDescriptionEn ? nextDescriptionEn : translated?.descriptionEn ?? existing.description_en,
       nextImageUrl,
       JSON.stringify(nextImageUrls),
       nextImageFit,
@@ -311,14 +407,40 @@ export async function handleUpdateGearItem(request: Request, env: Env) {
     return errorResponse('カード更新に失敗しました', 500)
   }
 
-  return jsonResponse({ ok: true, item: mapGearRow(updated) })
+  return jsonResponse({ ok: true, item: mapGearRowForResponse(updated, env, new URL(request.url)) })
 }
 
 export async function handleRenameGearCategory(request: Request, env: Env) {
   await ensureGearItemsSchema(env)
-  const body = await readJsonBody<{ oldCategory?: string; newCategory?: string }>(request)
+  const body = await readJsonBody<{
+    oldCategory?: string
+    newCategory?: string
+    targetCategory?: string
+    newCategoryEn?: string
+  }>(request)
   const oldCategory = typeof body?.oldCategory === 'string' ? body.oldCategory.trim() : ''
   const newCategory = typeof body?.newCategory === 'string' ? body.newCategory.trim() : ''
+  const targetCategory = typeof body?.targetCategory === 'string' ? body.targetCategory.trim() : ''
+  const hasNewCategoryEn = typeof body?.newCategoryEn === 'string'
+  const newCategoryEn = hasNewCategoryEn ? body.newCategoryEn.trim() || null : null
+
+  if (targetCategory) {
+    if (!hasNewCategoryEn) {
+      return errorResponse('英語カテゴリ名を入力してください', 400)
+    }
+    const now = nowSeconds()
+    const result = await env.DB
+      .prepare('UPDATE gear_items SET category_en = ?1, updated_at = ?2 WHERE category = ?3')
+      .bind(newCategoryEn, now, targetCategory)
+      .run()
+    const updatedCount = result.meta.changes ?? 0
+    return jsonResponse({
+      ok: true,
+      targetCategory,
+      newCategoryEn,
+      updatedCount,
+    })
+  }
 
   if (!oldCategory) {
     return errorResponse('変更前カテゴリ名を入力してください', 400)
@@ -328,11 +450,11 @@ export async function handleRenameGearCategory(request: Request, env: Env) {
     return errorResponse('変更後カテゴリ名を入力してください', 400)
   }
 
-  if (oldCategory === newCategory) {
+  if (oldCategory === newCategory && !hasNewCategoryEn) {
     return jsonResponse({ ok: true, oldCategory, newCategory, updatedCount: 0 })
   }
 
-  const canTranslate = Boolean(env.OPENAI_API_KEY?.trim())
+  const canTranslate = Boolean(env.OPENAI_API_KEY?.trim()) && !hasNewCategoryEn
   const translated = canTranslate
     ? await translateToEnglishWithOpenAI(
         {
@@ -344,15 +466,19 @@ export async function handleRenameGearCategory(request: Request, env: Env) {
       )
     : null
   const now = nowSeconds()
-  const newCategoryEn = translated?.categoryEn ?? null
+  const translatedCategoryEn = hasNewCategoryEn ? newCategoryEn : translated?.categoryEn ?? null
   let result
-  if (newCategoryEn != null) {
+  if (hasNewCategoryEn) {
     result = await env.DB
       .prepare('UPDATE gear_items SET category = ?1, category_en = ?2, updated_at = ?3 WHERE category = ?4')
-      .bind(newCategory, newCategoryEn, now, oldCategory)
+      .bind(newCategory, translatedCategoryEn, now, oldCategory)
+      .run()
+  } else if (translatedCategoryEn != null) {
+    result = await env.DB
+      .prepare('UPDATE gear_items SET category = ?1, category_en = ?2, updated_at = ?3 WHERE category = ?4')
+      .bind(newCategory, translatedCategoryEn, now, oldCategory)
       .run()
   } else {
-    // 翻訳不可時は既存の category_en を保持する
     result = await env.DB
       .prepare('UPDATE gear_items SET category = ?1, updated_at = ?2 WHERE category = ?3')
       .bind(newCategory, now, oldCategory)
@@ -364,7 +490,7 @@ export async function handleRenameGearCategory(request: Request, env: Env) {
     ok: true,
     oldCategory,
     newCategory,
-    newCategoryEn,
+    newCategoryEn: translatedCategoryEn,
     updatedCount,
   })
 }

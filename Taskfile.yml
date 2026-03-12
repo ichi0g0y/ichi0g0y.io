@@ -5,6 +5,7 @@ tasks:
     desc: 依存関係をインストール
     cmds:
       - bun install
+      - node ./scripts/fix_esbuild_macos.mjs
 
   dev:
     desc: 開発サーバー（Web + Worker API）を同時起動
@@ -13,11 +14,16 @@ tasks:
     cmds:
       - |
         zsh -lc '
+        WEB_PORT="$(awk -F= '\''/^APP_ORIGIN=/{print $2}'\'' .dev.vars 2>/dev/null | sed -E '\''s#.*:([0-9]+).*#\1#'\'' | tail -n1)"
+        if [ -z "$WEB_PORT" ]; then
+          WEB_PORT=5173
+        fi
+        mkdir -p dist
         bun run worker:dev &
         until nc -z 127.0.0.1 8787 >/dev/null 2>&1; do
           sleep 0.2
         done
-        bun run dev
+        bun run dev -- --port "$WEB_PORT"
         '
 
   dev-web:
@@ -25,24 +31,160 @@ tasks:
     deps:
       - install
     cmds:
-      - bun run dev
+      - |
+        zsh -lc '
+        WEB_PORT="$(awk -F= '\''/^APP_ORIGIN=/{print $2}'\'' .dev.vars 2>/dev/null | sed -E '\''s#.*:([0-9]+).*#\1#'\'' | tail -n1)"
+        if [ -z "$WEB_PORT" ]; then
+          WEB_PORT=5173
+        fi
+        bun run dev -- --port "$WEB_PORT"
+        '
 
-  worker-dev:
-    desc: Cloudflare Workers APIをローカル起動
+  dev:remote:web:
+    desc: リモートWorker用のフロントエンド開発サーバーのみ起動
     deps:
       - install
     cmds:
+      - |
+        zsh -lc '
+        WEB_PORT="$(awk -F= '\''/^APP_ORIGIN=/{print $2}'\'' .dev.vars 2>/dev/null | sed -E '\''s#.*:([0-9]+).*#\1#'\'' | tail -n1)"
+        if [ -z "$WEB_PORT" ]; then
+          WEB_PORT=5173
+        fi
+        bun run dev -- --port "$WEB_PORT"
+        '
+
+  dev:remote:web:noinstall:
+    desc: リモートWorker用のフロントエンド開発サーバーのみ起動（installスキップ）
+    cmds:
+      - |
+        zsh -lc '
+        WEB_PORT="$(awk -F= '\''/^APP_ORIGIN=/{print $2}'\'' .dev.vars 2>/dev/null | sed -E '\''s#.*:([0-9]+).*#\1#'\'' | tail -n1)"
+        if [ -z "$WEB_PORT" ]; then
+          WEB_PORT=5173
+        fi
+        bun run dev -- --port "$WEB_PORT"
+        '
+
+  dev:remote:
+    desc: 開発サーバー（Web + Worker API(remote)）をzellijセッションで起動
+    deps:
+      - install
+    cmds:
+      - task dev:remote:kill
+      - bash ./scripts/dev_remote_zellij.sh
+
+  dev:remote:kill:
+    desc: remote開発用のzellijセッションを終了
+    cmds:
+      - bash ./scripts/dev_remote_zellij_kill.sh
+
+  worker:dev:
+    desc: Cloudflare Workers APIをローカル起動
+    aliases:
+      - worker-dev
+    deps:
+      - install
+    cmds:
+      - mkdir -p dist
       - bun run worker:dev
 
-  d1-migrate-local:
+  worker:dev:remote:
+    desc: Cloudflare Workers APIをリモート起動
+    aliases:
+      - worker-dev-remote
+    deps:
+      - install
+    cmds:
+      - mkdir -p dist
+      - bun run worker:dev:remote
+
+  worker:dev:remote:noinstall:
+    desc: Cloudflare Workers APIをリモート起動（installスキップ）
+    cmds:
+      - mkdir -p dist
+      - bun run worker:dev:remote
+
+  worker:tail:remote:
+    desc: Cloudflare Workers(remote)のログをtail表示
+    aliases:
+      - worker-tail-remote
+    deps:
+      - install
+    cmds:
+      - bunx wrangler tail --env remote
+
+  d1:migrate:local:
     desc: D1マイグレーションをローカル適用
+    aliases:
+      - d1-migrate-local
     deps:
       - install
     cmds:
       - bun run d1:migrate:local
 
-  worker-deploy:
+  d1:migrate:remote:
+    desc: D1マイグレーションをリモート適用
+    aliases:
+      - d1-migrate-remote
+    deps:
+      - install
+    cmds:
+      - bun run d1:migrate:remote
+
+  withings:analyze:local:
+    desc: Withingsの保存measure typeをローカルD1で解析
+    aliases:
+      - withings-analyze-local
+    deps:
+      - install
+    cmds:
+      - bun run withings:analyze:local
+
+  withings:analyze:remote:
+    desc: Withingsの保存measure typeをリモートD1で解析
+    aliases:
+      - withings-analyze-remote
+    deps:
+      - install
+    cmds:
+      - bun run withings:analyze:remote
+
+  images:backfill:r2:local:
+    desc: 既存画像をローカルR2へバックフィル
+    aliases:
+      - images-backfill-r2-local
+    deps:
+      - install
+    cmds:
+      - bun run images:backfill:r2:local
+
+  images:backfill:r2:remote:
+    desc: 既存画像をリモートR2へバックフィル
+    aliases:
+      - images-backfill-r2-remote
+    deps:
+      - install
+    cmds:
+      - bun run images:backfill:r2:remote
+
+  d1:sync:local-to-remote:
+    desc: ローカルD1の gear_items をリモートへ反映（データのみ）
+    aliases:
+      - d1-sync-local-to-remote
+    deps:
+      - install
+    cmds:
+      - mkdir -p .context
+      - bunx wrangler d1 export DB --local --table gear_items --output .context/d1_local_data.sql --no-schema
+      - bun run d1:migrate:remote
+      - bunx wrangler d1 execute DB --remote --env remote --command "DELETE FROM gear_items; DELETE FROM sqlite_sequence WHERE name='gear_items';"
+      - bunx wrangler d1 execute DB --remote --env remote --file .context/d1_local_data.sql
+
+  worker:deploy:
     desc: Workersへデプロイ
+    aliases:
+      - worker-deploy
     deps:
       - install
     cmds:
@@ -53,7 +195,7 @@ tasks:
     deps:
       - install
     cmds:
-      - bun run build
+      - npm run build
 
   lint:
     desc: ESLintを実行
@@ -78,3 +220,21 @@ tasks:
     desc: ~/.envs の環境データを Worktree に復元
     cmds:
       - bash ./scripts/sync_workspace_env.sh pull
+
+  prod:deploy:
+    desc: .prod.vars を使って production へ deploy（secret反映を含む）
+    aliases:
+      - env:push:prod:remote
+    deps:
+      - build
+    cmds:
+      - bash ./scripts/push_prod_env_to_remote.sh
+
+  remote:deploy:
+    desc: .dev.vars をCloudflare remote環境へ反映して workers.dev へ deploy
+    aliases:
+      - env:push:remote
+    deps:
+      - build
+    cmds:
+      - bash ./scripts/push_remote_env_to_remote.sh

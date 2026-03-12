@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 
 import type { ToastState, ToastTone } from '../types'
 
+const TOAST_DURATION_MS = 7000
+
 export function useToast() {
   const [toast, setToast] = useState<ToastState | null>(null)
 
@@ -15,7 +17,7 @@ export function useToast() {
     }
     const timer = setTimeout(() => {
       setToast((current) => (current?.id === toast.id ? null : current))
-    }, 2800)
+    }, TOAST_DURATION_MS)
     return () => {
       clearTimeout(timer)
     }

@@ -1,0 +1,11 @@
+layout {
+    tab name="remote-dev" split_direction="vertical" {
+        pane command="bash" name="worker-remote" {
+            args "-lc" "task worker:dev:remote:noinstall"
+        }
+        pane command="bash" name="web" {
+            args "-lc" "task dev:remote:web:noinstall"
+            focus true
+        }
+    }
+}

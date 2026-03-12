@@ -1,6 +1,34 @@
 @media (max-width: 860px) {
+  .top-controls {
+    top: 0.6rem;
+    right: 0.6rem;
+    gap: 0.35rem;
+  }
+
+  .mode-toggle-button {
+    height: 34px;
+    padding: 0 0.5rem;
+    font-size: 0.7rem;
+    gap: 0.32rem;
+  }
+
+  .top-control-icon-button {
+    width: 34px;
+    height: 34px;
+  }
+
+  .top-control-select {
+    width: 34px;
+    height: 34px;
+  }
+
+  .back-to-picks {
+    width: 34px;
+    height: 34px;
+  }
+
   .twitch-zone {
-    width: min(420px, 84vw);
+    width: min(720px, calc(100% - 1.2rem));
   }
 
   .twitch-wide-card {
@@ -8,11 +36,11 @@
   }
 
   .card {
-    width: min(420px, 84vw);
+    width: min(560px, calc(100% - 1.2rem));
   }
 
   .gear-zone {
-    width: min(420px, 84vw);
+    width: min(720px, calc(100% - 1.2rem));
     padding: 0.85rem;
   }
 
@@ -41,6 +69,10 @@
     grid-template-columns: 1fr;
   }
 
+  .twitter-template-meta {
+    grid-template-columns: 1fr;
+  }
+
   .twitch-side-link {
     flex-direction: row;
     justify-content: flex-start;
@@ -59,4 +91,5 @@
   .twitch-main {
     width: 100%;
   }
+
 }

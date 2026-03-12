@@ -1,0 +1,231 @@
+html[data-theme='dark'],
+body[data-theme='dark'] {
+  --app-top-background: #111b2f;
+  --app-page-background: #0b1220;
+  --app-text-color: #e2e8f0;
+  color: var(--app-text-color);
+}
+
+body[data-theme='dark'] .page {
+  color: var(--app-text-color);
+}
+
+body[data-theme='dark'] .title-area,
+body[data-theme='dark'] .twitch-wide-card,
+body[data-theme='dark'] .twitch-main,
+body[data-theme='dark'] .twitch-embed-wrap,
+body[data-theme='dark'] .twitch-offline,
+body[data-theme='dark'] .card,
+body[data-theme='dark'] .gear-item-card,
+body[data-theme='dark'] .gear-filter-chip,
+body[data-theme='dark'] .gear-add-button,
+body[data-theme='dark'] .auth-dialog,
+body[data-theme='dark'] .admin-panel,
+body[data-theme='dark'] .selected-image-preview,
+body[data-theme='dark'] .image-candidate-none,
+body[data-theme='dark'] .edit-image-item,
+body[data-theme='dark'] .category-command,
+body[data-theme='dark'] .category-command-trigger,
+body[data-theme='dark'] .category-command-list,
+body[data-theme='dark'] .admin-switch-row,
+body[data-theme='dark'] .admin-button.ghost,
+body[data-theme='dark'] .app-toast,
+body[data-theme='dark'] .twitter-template-meta-item,
+body[data-theme='dark'] .twitter-template-preview,
+body[data-theme='dark'] .twitter-template-chart-preview,
+body[data-theme='dark'] .twitter-template-placeholder-button,
+body[data-theme='dark'] .twitter-template-preview-refresh {
+  background: #111b2f;
+  border-color: #2b3953;
+  color: #dbe6f7;
+}
+
+body[data-theme='dark'] .mode-toggle-button,
+body[data-theme='dark'] .top-control-select,
+body[data-theme='dark'] .top-control-icon-button,
+body[data-theme='dark'] .back-to-picks {
+  background: #111b2f;
+  border-color: #2b3953;
+  color: #dbe6f7;
+}
+
+body[data-theme='dark'] .mode-toggle-button:hover,
+body[data-theme='dark'] .top-control-select:hover,
+body[data-theme='dark'] .top-control-icon-button:hover,
+body[data-theme='dark'] .back-to-picks:hover {
+  background: #16243f;
+  border-color: #435a80;
+}
+
+body[data-theme='dark'] .mode-toggle-button.is-edit {
+  border-color: #93c5fd;
+  color: #93c5fd;
+}
+
+body[data-theme='dark'] .top-control-select-icon {
+  color: #9fb0c9;
+}
+
+body[data-theme='dark'] .name-main,
+body[data-theme='dark'] .twitch-side-title,
+body[data-theme='dark'] .gear-heading,
+body[data-theme='dark'] .gear-item-name,
+body[data-theme='dark'] .auth-dialog-title,
+body[data-theme='dark'] .admin-title {
+  color: #f8fafc;
+}
+
+body[data-theme='dark'] .intro-text,
+body[data-theme='dark'] .typing-caret,
+body[data-theme='dark'] .gear-description,
+body[data-theme='dark'] .gear-note,
+body[data-theme='dark'] .gear-loading,
+body[data-theme='dark'] .gear-item-meta,
+body[data-theme='dark'] .gear-item-description,
+body[data-theme='dark'] .auth-step-note,
+body[data-theme='dark'] .confirm-dialog-message,
+body[data-theme='dark'] .add-dialog-note,
+body[data-theme='dark'] .selected-image-empty,
+body[data-theme='dark'] .selected-image-summary,
+body[data-theme='dark'] .admin-label,
+body[data-theme='dark'] .admin-state,
+body[data-theme='dark'] .admin-message,
+body[data-theme='dark'] .twitter-template-note,
+body[data-theme='dark'] .twitter-template-meta-item span,
+body[data-theme='dark'] .twitter-template-section-title,
+body[data-theme='dark'] .twitter-template-chart-preview-empty,
+body[data-theme='dark'] .copyright {
+  color: #9fb0c9;
+}
+
+body[data-theme='dark'] .twitter-template-meta-item strong,
+body[data-theme='dark'] .twitter-template-placeholder-button code {
+  color: #f8fafc;
+}
+
+body[data-theme='dark'] .twitch-side-link,
+body[data-theme='dark'] .card {
+  color: #f8fafc;
+}
+
+body[data-theme='dark'] .card-title,
+body[data-theme='dark'] .gear-item-name-link {
+  color: #c7ddff;
+}
+
+body[data-theme='dark'] .gear-filter-chip {
+  color: #c5d2e8;
+}
+
+body[data-theme='dark'] .gear-filter-chip:hover,
+body[data-theme='dark'] .admin-button.ghost:hover,
+body[data-theme='dark'] .auth-dialog-close:hover,
+body[data-theme='dark'] .image-candidate-none:hover,
+body[data-theme='dark'] .twitter-template-preview-refresh:hover:not(:disabled) {
+  background: #16243f;
+}
+
+body[data-theme='dark'] .gear-filter-chip.is-active,
+body[data-theme='dark'] .image-candidate-none.is-selected {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #eff6ff;
+}
+
+body[data-theme='dark'] .gear-filter-chip-wrap.is-drop-target .gear-filter-chip,
+body[data-theme='dark'] .gear-item-card.is-drop-target,
+body[data-theme='dark'] .edit-image-item.is-drop-target {
+  border-color: #5b7baa;
+  box-shadow: 0 0 0 2px rgba(91, 123, 170, 0.35);
+}
+
+body[data-theme='dark'] .gear-item-card.is-admin:hover {
+  border-color: transparent;
+}
+
+body[data-theme='dark'] .gear-item-card {
+  border-color: transparent;
+}
+
+body[data-theme='dark'] .card[href*='github.com'] .card-icon {
+  filter: brightness(0) invert(1);
+}
+
+body[data-theme='dark'] .image-candidate-button img.is-contain,
+body[data-theme='dark'] .selected-image-preview img.is-contain,
+body[data-theme='dark'] .edit-image-thumb img.is-contain {
+  background: #16243f;
+}
+
+body[data-theme='dark'] .admin-input,
+body[data-theme='dark'] .admin-select,
+body[data-theme='dark'] .admin-textarea,
+body[data-theme='dark'] .category-command-input {
+  background: #0f1a2f;
+  border-color: #324663;
+  color: #e2e8f0;
+}
+
+body[data-theme='dark'] .category-command-item {
+  color: #dbe6f7;
+}
+
+body[data-theme='dark'] .category-command-item[data-selected='true'] {
+  background: #16243f;
+}
+
+body[data-theme='dark'] .category-command-empty {
+  color: #9fb0c9;
+}
+
+body[data-theme='dark'] .image-fit-switch {
+  background: #2b3953;
+  border-color: #3f5171;
+}
+
+body[data-theme='dark'] .image-fit-switch.is-on {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+body[data-theme='dark'] .admin-button {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #eff6ff;
+}
+
+body[data-theme='dark'] .admin-button.danger {
+  background: #be123c;
+  border-color: #be123c;
+  color: #fff1f2;
+}
+
+body[data-theme='dark'] .auth-dialog-close {
+  background: #111b2f;
+  border-color: #324663;
+  color: #dbe6f7;
+}
+
+body[data-theme='dark'] .image-candidate-button,
+body[data-theme='dark'] .selected-image-preview,
+body[data-theme='dark'] .edit-image-item {
+  border-color: #2b3953;
+}
+
+body[data-theme='dark'] .image-candidate-button.is-selected,
+body[data-theme='dark'] .edit-image-item.is-primary {
+  border-color: #5b7baa;
+  box-shadow: 0 0 0 2px rgba(91, 123, 170, 0.35);
+}
+
+body[data-theme='dark'] .app-toast.is-success {
+  border-color: #166534;
+  background: #092012;
+  color: #86efac;
+}
+
+body[data-theme='dark'] .app-toast.is-error {
+  border-color: #9f1239;
+  background: #2d0d16;
+  color: #fda4af;
+}

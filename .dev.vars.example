@@ -2,6 +2,26 @@ ACCESS_TOKEN_SECRET=replace-with-long-random-string
 ALLOWED_GITHUB_LOGINS=your-github-login,ichi0g0y
 GITHUB_CLIENT_ID=replace-with-github-oauth-app-client-id
 GITHUB_CLIENT_SECRET=replace-with-github-oauth-app-client-secret
+TWITTER_CLIENT_ID=replace-with-x-client-id
+TWITTER_CLIENT_SECRET=replace-with-x-client-secret
+TWITTER_CONSUMER_KEY=replace-with-x-consumer-key
+TWITTER_CONSUMER_SECRET=replace-with-x-consumer-secret
+TWITTER_BEARER_TOKEN=replace-with-x-bearer-token
+TWITTER_OAUTH_SCOPE=tweet.read tweet.write users.read offline.access media.write
 APP_ORIGIN=http://localhost:5173
 OPENAI_API_KEY=replace-with-openai-api-key
 OPENAI_MODEL=gpt-4.1-mini
+WITHINGS_CLIENT_ID=replace-with-withings-client-id
+WITHINGS_CLIENT_SECRET=replace-with-withings-client-secret
+# Withings OAuth/Webhookの公開URL（workers.dev固定URL）
+WITHINGS_PUBLIC_ORIGIN=https://ichi0g0y-io-remote.example.workers.dev
+# 任意: Withings管理画面の Callback URL と完全一致させたい場合に固定指定
+WITHINGS_CALLBACK_URL=https://ichi0g0y-io-remote.example.workers.dev/api/withings/auth/callback
+# 任意: Webhook callback を固定指定したい場合のみ設定（未指定時は /api/withings/notify を自動利用）
+WITHINGS_NOTIFY_CALLBACK_URL=https://ichi0g0y-io-remote.example.workers.dev/api/withings/notify
+# 任意: Webhook呼び出しの検証用トークン。設定すると /api/withings/notify?token=... が必須になります。
+WITHINGS_NOTIFY_SECRET=
+# 任意: OAuth scope（デフォルト: user.metrics,user.activity,user.sleepevents）
+WITHINGS_OAUTH_SCOPE=user.metrics,user.activity,user.sleepevents
+# 任意: BMI算出用の身長(m)。Withings側でheight(type=4)が取れない場合のフォールバック。
+WITHINGS_USER_HEIGHT_M=

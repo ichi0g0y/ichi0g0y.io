@@ -1,51 +1,106 @@
-.copyright {
-  margin: 6rem 0 0;
-  text-align: center;
-  font-size: 0.8rem;
-  color: #6b7280;
+.top-controls {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 130;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
 }
 
-.language-toggle-button {
-  position: fixed;
-  left: 1rem;
-  bottom: 1rem;
-  z-index: 115;
+.top-control-button-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.top-control-icon-button {
   width: 38px;
   height: 38px;
-  border: 1px solid #d5dbe4;
+  border: 3px solid #d5dbe4;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #475569;
+  background: rgba(255, 255, 255, 0.96);
+  color: #334155;
   padding: 0;
-  display: grid;
+  display: inline-grid;
   place-items: center;
   cursor: pointer;
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
-.language-toggle-button:hover {
+.top-control-icon-button:hover {
   border-color: #b9c4d3;
   background: #ffffff;
 }
 
-.language-toggle-button svg {
+.top-control-icon-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.top-control-icon-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.copyright {
+  margin: 6rem 0 3rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.top-control-select {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border: 3px solid #d5dbe4;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #334155;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.top-control-select:hover {
+  border-color: #b9c4d3;
+  background: #ffffff;
+}
+
+.top-control-select:has(.top-control-select-input:focus-visible) {
+  border-color: #94a3b8;
+}
+
+.top-control-select-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+}
+
+.top-control-select-icon svg {
   width: 15px;
   height: 15px;
 }
 
-.language-toggle-code {
+.top-control-select-input {
   position: absolute;
-  right: -1px;
-  bottom: -1px;
-  min-width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  background: #0f172a;
-  color: #ffffff;
-  font-size: 9px;
-  line-height: 16px;
-  font-weight: 700;
-  text-align: center;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.top-control-select-input:focus {
+  outline: none;
 }
 
 .app-toast {
@@ -63,6 +118,40 @@
   font-size: 0.82rem;
   line-height: 1.4;
   box-shadow: 0 16px 30px -22px rgba(15, 23, 42, 0.85);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.app-toast-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.app-toast-message {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  flex: 1 1 auto;
+}
+
+.app-toast-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  line-height: 1;
+}
+
+.app-toast-copy:hover {
+  opacity: 0.85;
 }
 
 .app-toast.is-success {
@@ -75,4 +164,46 @@
   border-color: #eed5d7;
   background: #fff9f9;
   color: #9f1239;
+}
+
+.back-to-picks {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.8rem);
+  z-index: 125;
+  width: 38px;
+  height: 38px;
+  border: 3px solid #d5dbe4;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 12px);
+  transition: opacity 0.22s ease, transform 0.22s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.back-to-picks svg {
+  width: 15px;
+  height: 15px;
+}
+
+.back-to-picks.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 0);
+}
+
+.back-to-picks:hover {
+  background: #ffffff;
+  border-color: #b9c4d3;
+}
+
+.back-to-picks:focus-visible {
+  outline: none;
+  border-color: #94a3b8;
 }

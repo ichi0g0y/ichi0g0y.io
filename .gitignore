@@ -19,7 +19,11 @@ build/
 .env.local
 .env.*.local
 .dev.vars
+.prod.vars
+.dev.vars.prod
 .wrangler/
+.wrangler.generated.*.toml
+.wrangler.secrets.*.env
 
 # IDE and editor
 .vscode/

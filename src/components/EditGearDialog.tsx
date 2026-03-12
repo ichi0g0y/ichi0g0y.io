@@ -1,5 +1,5 @@
 import { Cross2Icon } from '@radix-ui/react-icons'
-import type { DragEvent, FormEvent, SyntheticEvent } from 'react'
+import { useRef, type DragEvent, type FormEvent, type SyntheticEvent } from 'react'
 
 import type { GearItem, ImageSize } from '../types'
 import { CategoryCommandField } from './CategoryCommandField'
@@ -7,8 +7,12 @@ import { ImageFitSwitch } from './ImageFitSwitch'
 
 export type EditGearDialogProps = {
   editTitle: string
+  editTitleEn: string
   editDescription: string
+  editDescriptionEn: string
   editCategory: string
+  editCategoryLabel: string
+  categoryOptions: string[]
   editImageUrls: string[]
   editImageUrlInput: string
   editImageCandidates: string[]
@@ -17,15 +21,18 @@ export type EditGearDialogProps = {
   editPreviewUrl: string
   editDraggingImageIndex: number | null
   editDragOverImageIndex: number | null
-  categoryOptions: string[]
   isUpdating: boolean
   isFetchingEditPreview: boolean
   imageSizesByUrl: Record<string, ImageSize>
   onClose: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onSetEditTitle: (value: string) => void
+  onSetEditTitleEn: (value: string) => void
   onSetEditDescription: (value: string) => void
+  onSetEditDescriptionEn: (value: string) => void
   onSetEditCategory: (value: string) => void
+  isTranslatingEditDescriptionEn: boolean
+  onTranslateEditDescriptionEn: () => void
   onSetEditImageUrlInput: (value: string) => void
   onSetEditPreviewUrl: (value: string) => void
   onSetEditImageFit: (value: GearItem['imageFit']) => void
@@ -44,8 +51,12 @@ export type EditGearDialogProps = {
 
 export function EditGearDialog({
   editTitle,
+  editTitleEn,
   editDescription,
+  editDescriptionEn,
   editCategory,
+  editCategoryLabel,
+  categoryOptions,
   editImageUrls,
   editImageUrlInput,
   editImageCandidates,
@@ -54,14 +65,17 @@ export function EditGearDialog({
   editPreviewUrl,
   editDraggingImageIndex,
   editDragOverImageIndex,
-  categoryOptions,
   isUpdating,
   isFetchingEditPreview,
   onClose,
   onSubmit,
   onSetEditTitle,
+  onSetEditTitleEn,
   onSetEditDescription,
+  onSetEditDescriptionEn,
   onSetEditCategory,
+  isTranslatingEditDescriptionEn,
+  onTranslateEditDescriptionEn,
   onSetEditImageUrlInput,
   onSetEditPreviewUrl,
   onSetEditImageFit,
@@ -77,9 +91,24 @@ export function EditGearDialog({
   onPreviewImageLoad,
   getImageSizeLabel,
 }: EditGearDialogProps) {
+  const dialogRef = useRef<HTMLElement | null>(null)
+
+  const preserveScrollPosition = (callback: () => void) => {
+    const dialog = dialogRef.current
+    const scrollTop = dialog?.scrollTop ?? 0
+    callback()
+    if (!dialog) {
+      return
+    }
+    requestAnimationFrame(() => {
+      dialog.scrollTop = scrollTop
+    })
+  }
+
   return (
     <div className="auth-dialog-backdrop" role="presentation" onClick={onClose}>
       <section
+        ref={dialogRef}
         className="auth-dialog gear-edit-dialog"
         role="dialog"
         aria-modal="true"
@@ -101,7 +130,7 @@ export function EditGearDialog({
 
         <form className="admin-form add-form" onSubmit={onSubmit}>
           <label className="admin-label">
-            タイトル
+            タイトル（日本語）
             <input
               className="admin-input"
               type="text"
@@ -112,12 +141,41 @@ export function EditGearDialog({
             />
           </label>
           <label className="admin-label">
-            説明
+            タイトル（英語）
+            <input
+              className="admin-input"
+              type="text"
+              value={editTitleEn}
+              onChange={(event) => onSetEditTitleEn(event.target.value)}
+              placeholder="Card title (English)"
+            />
+          </label>
+          <label className="admin-label">
+            説明（日本語）
             <textarea
               className="admin-textarea"
               value={editDescription}
               onChange={(event) => onSetEditDescription(event.target.value)}
               placeholder="説明文"
+            />
+          </label>
+          <label className="admin-label">
+            <span className="admin-label-row">
+              <span>説明（英語）</span>
+              <button
+                className="admin-button ghost admin-inline-button"
+                type="button"
+                onClick={onTranslateEditDescriptionEn}
+                disabled={isUpdating || isTranslatingEditDescriptionEn || editDescription.trim().length < 1}
+              >
+                {isTranslatingEditDescriptionEn ? '翻訳中...' : '日本語から英訳'}
+              </button>
+            </span>
+            <textarea
+              className="admin-textarea"
+              value={editDescriptionEn}
+              onChange={(event) => onSetEditDescriptionEn(event.target.value)}
+              placeholder="Description (English)"
             />
           </label>
           <label className="admin-label">
@@ -129,7 +187,7 @@ export function EditGearDialog({
               placeholder="カテゴリを入力（候補から選択可）"
             />
           </label>
-          <p className="add-dialog-note">カテゴリ名を変えると、同じカテゴリの他カードにも一括反映されます。</p>
+          <p className="add-dialog-note">選択中: {editCategoryLabel}</p>
           <label className="admin-label">
             画像（任意）
             <div className="edit-image-fetch-row">
@@ -151,6 +209,7 @@ export function EditGearDialog({
                 {isFetchingEditPreview ? '取得中...' : '候補画像を再取得'}
               </button>
             </div>
+            <p className="add-dialog-note">再取得すると現在の画像を候補画像で置き換えます。不要な画像は更新前に外せます。</p>
             {editImageCandidates.length > 0 ? (
               <div className="image-candidate-grid">
                 {editImageCandidates.map((candidateUrl, index) => {
@@ -241,7 +300,8 @@ export function EditGearDialog({
                       <button
                         className="admin-button danger"
                         type="button"
-                        onClick={() => onRemoveEditImage(index)}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => preserveScrollPosition(() => onRemoveEditImage(index))}
                         disabled={isUpdating}
                       >
                         削除

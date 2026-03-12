@@ -1,0 +1,44 @@
+name = "ichi0g0y-io"
+main = "worker/index.ts"
+compatibility_date = "2026-03-03"
+workers_dev = true
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ichi0g0y-io"
+database_id = "211ee884-4858-49f1-9e73-cca7609c6893"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "IMAGE_BUCKET"
+bucket_name = "ichi0g0y-io"
+
+[env.dev]
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "ichi0g0y-io"
+database_id = "211ee884-4858-49f1-9e73-cca7609c6893"
+migrations_dir = "migrations"
+
+[[env.dev.r2_buckets]]
+binding = "IMAGE_BUCKET"
+bucket_name = "ichi0g0y-io"
+
+[env.remote]
+
+[[env.remote.d1_databases]]
+binding = "DB"
+database_name = "ichi0g0y-io-remote"
+database_id = "fe8d977a-01e5-4d68-a69f-a37a455f7e43"
+migrations_dir = "migrations"
+
+[[env.remote.r2_buckets]]
+binding = "IMAGE_BUCKET"
+bucket_name = "ichi0g0y-io-remote"
