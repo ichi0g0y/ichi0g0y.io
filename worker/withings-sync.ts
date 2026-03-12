@@ -331,6 +331,26 @@ async function refreshAccessToken(connection: WithingsConnection, env: Env) {
   return payload.body
 }
 
+async function getConcurrentRefreshedConnection(
+  env: Env,
+  previousConnection: WithingsConnection,
+  now: number,
+) {
+  const latestConnection = await getStoredConnection(env)
+  if (!latestConnection || latestConnection.userId !== previousConnection.userId) {
+    return null
+  }
+
+  const credentialsUpdated =
+    latestConnection.accessToken !== previousConnection.accessToken ||
+    latestConnection.refreshToken !== previousConnection.refreshToken
+  if (credentialsUpdated || latestConnection.accessExpiresAt > now + ACCESS_TOKEN_REFRESH_MARGIN_SEC) {
+    return latestConnection
+  }
+
+  return null
+}
+
 export async function ensureConnectionReady(env: Env) {
   const connection = await getStoredConnection(env)
   if (!connection) {
@@ -348,6 +368,10 @@ export async function ensureConnectionReady(env: Env) {
 
   const refreshedTokenBody = await refreshAccessToken(connection, env)
   if (!refreshedTokenBody) {
+    const concurrentConnection = await getConcurrentRefreshedConnection(env, connection, now)
+    if (concurrentConnection) {
+      return concurrentConnection
+    }
     return null
   }
   const updatedConnection = await upsertConnection(
@@ -357,7 +381,12 @@ export async function ensureConnectionReady(env: Env) {
     connection.notifySubscribedAt,
     connection.heightM,
   )
-  return updatedConnection ?? null
+  if (updatedConnection) {
+    return updatedConnection
+  }
+
+  const concurrentConnection = await getConcurrentRefreshedConnection(env, connection, now)
+  return concurrentConnection ?? null
 }
 
 async function postWithingsWithRefresh<TBody>(

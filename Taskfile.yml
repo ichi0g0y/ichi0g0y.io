@@ -67,17 +67,17 @@ tasks:
         '
 
   dev:remote:
-    desc: 開発サーバー（Web + Worker API(remote)）をtmuxセッションで起動
+    desc: 開発サーバー（Web + Worker API(remote)）をzellijセッションで起動
     deps:
       - install
     cmds:
       - task dev:remote:kill
-      - bash ./scripts/dev_remote_tmux.sh
+      - bash ./scripts/dev_remote_zellij.sh
 
   dev:remote:kill:
-    desc: remote開発用のtmuxセッションを終了
+    desc: remote開発用のzellijセッションを終了
     cmds:
-      - bash ./scripts/dev_remote_tmux_kill.sh
+      - bash ./scripts/dev_remote_zellij_kill.sh
 
   worker:dev:
     desc: Cloudflare Workers APIをローカル起動
