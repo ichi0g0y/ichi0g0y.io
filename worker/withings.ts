@@ -911,19 +911,26 @@ export async function handleWithingsNotify(request: Request, env: Env, ctx?: Exe
         const now = nowSeconds()
         const accessExpiresAt = storedConn?.accessExpiresAt ?? null
         const refreshDue = typeof accessExpiresAt === 'number' ? accessExpiresAt <= now + ACCESS_TOKEN_REFRESH_MARGIN_SEC : null
-        await notifyWithingsError(
-          env,
-          'notify_connection_unavailable',
-          'Withings連携情報は保存されていますが、現在利用できないため通知処理を継続できませんでした。',
-          [
-            `userId: ${storedConn?.userId ?? '(unknown)'}`,
-            `accessExpiresAt: ${formatDiscordTimestamp(accessExpiresAt) ?? '(unknown)'}`,
-            `lastSyncedAt: ${formatDiscordTimestamp(storedConn?.lastSyncedAt) ?? '(unknown)'}`,
-            `notifyCallbackUrl: ${sanitizeWithingsNotifyCallbackUrl(storedConn?.notifyCallbackUrl) ?? '(unknown)'}`,
-            `refreshDue: ${refreshDue === null ? '(unknown)' : String(refreshDue)}`,
-            'diagnosis: access token refresh failed while processing notify',
-          ],
-        )
+        if (refreshDue === false) {
+          console.warn('[withings] suppressed connection_unavailable notification (concurrent refresh detected)', {
+            userId: storedConn?.userId,
+            accessExpiresAt,
+          })
+        } else {
+          await notifyWithingsError(
+            env,
+            'notify_connection_unavailable',
+            'Withings連携情報は保存されていますが、現在利用できないため通知処理を継続できませんでした。',
+            [
+              `userId: ${storedConn?.userId ?? '(unknown)'}`,
+              `accessExpiresAt: ${formatDiscordTimestamp(accessExpiresAt) ?? '(unknown)'}`,
+              `lastSyncedAt: ${formatDiscordTimestamp(storedConn?.lastSyncedAt) ?? '(unknown)'}`,
+              `notifyCallbackUrl: ${sanitizeWithingsNotifyCallbackUrl(storedConn?.notifyCallbackUrl) ?? '(unknown)'}`,
+              `refreshDue: ${refreshDue === null ? '(unknown)' : String(refreshDue)}`,
+              'diagnosis: access token refresh failed while processing notify',
+            ],
+          )
+        }
       } else if (result.skipReason === 'payload_user_mismatch') {
         await notifyWithingsError(env, 'notify_payload_user_mismatch', 'Withings通知のユーザーIDが保存済みユーザーと一致しません。')
       } else if (result.skipReason === 'sync_failed') {
