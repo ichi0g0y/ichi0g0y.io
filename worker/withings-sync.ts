@@ -336,18 +336,22 @@ async function getConcurrentRefreshedConnection(
   previousConnection: WithingsConnection,
   now: number,
 ) {
-  const latestConnection = await getStoredConnection(env)
-  if (!latestConnection || latestConnection.userId !== previousConnection.userId) {
-    return null
-  }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, 500))
+    }
+    const latestConnection = await getStoredConnection(env)
+    if (!latestConnection || latestConnection.userId !== previousConnection.userId) {
+      return null
+    }
 
-  const credentialsUpdated =
-    latestConnection.accessToken !== previousConnection.accessToken ||
-    latestConnection.refreshToken !== previousConnection.refreshToken
-  if (credentialsUpdated || latestConnection.accessExpiresAt > now + ACCESS_TOKEN_REFRESH_MARGIN_SEC) {
-    return latestConnection
+    const credentialsUpdated =
+      latestConnection.accessToken !== previousConnection.accessToken ||
+      latestConnection.refreshToken !== previousConnection.refreshToken
+    if (credentialsUpdated || latestConnection.accessExpiresAt > now + ACCESS_TOKEN_REFRESH_MARGIN_SEC) {
+      return latestConnection
+    }
   }
-
   return null
 }
 
